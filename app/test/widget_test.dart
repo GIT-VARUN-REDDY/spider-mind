@@ -77,6 +77,7 @@ void main() {
       expect(find.text('I already have an account'), findsOneWidget);
 
       // Tap back to sign in
+      await tester.ensureVisible(find.text('I already have an account'));
       await tester.tap(find.text('I already have an account'));
       await tester.pump();
 

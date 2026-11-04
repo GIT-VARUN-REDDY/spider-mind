@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 import '../core/config.dart';
 import '../data/api.dart';
@@ -269,6 +270,42 @@ class AppState extends ChangeNotifier {
 
   Future<bool> register({required String email, required String password, required String name}) =>
       _authCall('/auth/register', {'email': email.trim(), 'password': password, 'name': name.trim(), 'timezone': _currentTimeZone()});
+
+  Future<bool> loginWithGoogle(String credential) =>
+      _authCall('/auth/google', {'credential': credential, 'idToken': credential, 'accessToken': credential});
+
+  Future<bool> signInWithGoogle() async {
+    _busy = true;
+    _authError = null;
+    notifyListeners();
+    try {
+      final googleSignIn = GoogleSignIn(
+        clientId: kIsWeb ? '493865528762-6g4edvbovdsmaai2q14rtfccv4icase5.apps.googleusercontent.com' : null,
+        serverClientId: '493865528762-6g4edvbovdsmaai2q14rtfccv4icase5.apps.googleusercontent.com',
+        scopes: ['email', 'profile'],
+      );
+      final account = await googleSignIn.signIn();
+      if (account == null) {
+        _busy = false;
+        notifyListeners();
+        return false;
+      }
+      final auth = await account.authentication;
+      final token = auth.idToken ?? auth.accessToken;
+      if (token == null || token.isEmpty) {
+        _authError = 'Google did not return an authentication token.';
+        _busy = false;
+        notifyListeners();
+        return false;
+      }
+      return await loginWithGoogle(token);
+    } catch (e) {
+      _busy = false;
+      _authError = 'Google Sign-In: ${e.toString()}';
+      notifyListeners();
+      return false;
+    }
+  }
 
   Future<bool> _authCall(String path, Map<String, dynamic> body) async {
     _busy = true;

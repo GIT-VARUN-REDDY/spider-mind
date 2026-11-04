@@ -21,12 +21,120 @@ class RootGate extends StatelessWidget {
     final status = context.select<AppState, AuthStatus>((s) => s.authStatus);
     switch (status) {
       case AuthStatus.unknown:
-        return const Scaffold(body: Center(child: CircularProgressIndicator()));
+        return const SplashScreen();
       case AuthStatus.signedOut:
         return const AuthScreen();
       case AuthStatus.signedIn:
         return const HomeShell();
     }
+  }
+}
+
+// ------------------------------------------------------------------ splash
+class SplashScreen extends StatefulWidget {
+  const SplashScreen({super.key});
+
+  @override
+  State<SplashScreen> createState() => _SplashScreenState();
+}
+
+class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+  late Animation<double> _scale;
+  late Animation<double> _opacity;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 1400))..repeat(reverse: true);
+    _scale = Tween<double>(begin: 0.95, end: 1.05).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
+    _opacity = Tween<double>(begin: 0.75, end: 1.0).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFF03040A),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          Image.asset('assets/images/splash.png', fit: BoxFit.cover, errorBuilder: (_, __, ___) => const SizedBox()),
+          Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [const Color(0xFF03040A).withValues(alpha: 0.45), const Color(0xFF03040A).withValues(alpha: 0.9)],
+              ),
+            ),
+          ),
+          Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                AnimatedBuilder(
+                  animation: _ctrl,
+                  builder: (context, child) {
+                    return Transform.scale(
+                      scale: _scale.value,
+                      child: Opacity(
+                        opacity: _opacity.value,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(color: kCrimson.withValues(alpha: 0.4), blurRadius: 36, spreadRadius: 4),
+                              BoxShadow(color: kBlue.withValues(alpha: 0.4), blurRadius: 48, spreadRadius: 6),
+                            ],
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(28),
+                            child: Image.asset('assets/images/logo.png', width: 110, height: 110),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 28),
+                ShaderMask(
+                  shaderCallback: (bounds) => const LinearGradient(
+                    colors: [Color(0xFFFF2A44), Color(0xFF32B4FF)],
+                  ).createShader(bounds),
+                  child: const Text(
+                    'PROJECT SPIDER',
+                    style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900, letterSpacing: 3.0, color: Colors.white),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Synthesizing living 3D thread web...',
+                  style: TextStyle(fontSize: 13, color: Colors.white.withValues(alpha: 0.65), letterSpacing: 0.5),
+                ),
+                const SizedBox(height: 36),
+                SizedBox(
+                  width: 140,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: const LinearProgressIndicator(
+                      minHeight: 3,
+                      backgroundColor: Colors.white12,
+                      valueColor: AlwaysStoppedAnimation<Color>(kBlue),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -72,8 +180,27 @@ class _AuthScreenState extends State<AuthScreen> {
               child: Form(
                 key: _form,
                 child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                  const Icon(Icons.hub_rounded, size: 56, color: kCrimson),
-                  const SizedBox(height: 12),
+                  Center(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(color: kCrimson.withValues(alpha: 0.35), blurRadius: 28, spreadRadius: 2),
+                          BoxShadow(color: kBlue.withValues(alpha: 0.35), blurRadius: 36, spreadRadius: 3),
+                        ],
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(20),
+                        child: Image.asset(
+                          'assets/images/logo.png',
+                          width: 80,
+                          height: 80,
+                          errorBuilder: (_, __, ___) => const Icon(Icons.hub_rounded, size: 56, color: kCrimson),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
                   Text('Project Spider', textAlign: TextAlign.center, style: t.headlineMedium?.copyWith(fontWeight: FontWeight.w900)),
                   const SizedBox(height: 6),
                   Text('Your tasks, ideas and goals as one living web.', textAlign: TextAlign.center, style: t.bodyMedium),
@@ -106,6 +233,41 @@ class _AuthScreenState extends State<AuthScreen> {
                   if (s.authError != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(s.authError!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
                   const SizedBox(height: 20),
                   FilledButton(onPressed: s.busy ? null : _submit, child: s.busy ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2)) : Text(_register ? 'Create account' : 'Sign in')),
+                  const SizedBox(height: 14),
+                  Row(
+                    children: [
+                      Expanded(child: Divider(color: Colors.white.withValues(alpha: 0.15))),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: Text('OR', style: TextStyle(fontSize: 11, color: Colors.white.withValues(alpha: 0.45), fontWeight: FontWeight.bold)),
+                      ),
+                      Expanded(child: Divider(color: Colors.white.withValues(alpha: 0.15))),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  OutlinedButton(
+                    onPressed: s.busy ? null : () => s.signInWithGoogle(),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      backgroundColor: Colors.white.withValues(alpha: 0.04),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Image.network(
+                          'https://www.gstatic.com/images/branding/product/2x/googleg_48dp.png',
+                          width: 20,
+                          height: 20,
+                          errorBuilder: (_, __, ___) => const Icon(Icons.g_mobiledata, color: Colors.white, size: 24),
+                        ),
+                        const SizedBox(width: 10),
+                        const Text('Continue with Google', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 6),
                   TextButton(onPressed: () => setState(() => _register = !_register), child: Text(_register ? 'I already have an account' : 'New here? Create an account')),
                   TextButton(onPressed: () => _serverDialog(context), child: const Text('Server settings')),
                 ]),
