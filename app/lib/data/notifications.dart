@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/data/latest_all.dart' as tzdata;
@@ -31,21 +32,39 @@ class NotificationService {
   Stream<NotificationEvent> get events => _events.stream;
   bool get supported => !kIsWeb && (defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS);
 
-  static const _channel = AndroidNotificationDetails(
-    'reminders',
-    'Reminders',
-    channelDescription: 'Reminders and due dates for your threads',
-    importance: Importance.high,
-    priority: Priority.high,
-    category: AndroidNotificationCategory.reminder,
-    actions: [
+  static final Int64List _vibrationPattern = Int64List.fromList([0, 500, 250, 500, 250, 800]);
+
+  static final _channel = AndroidNotificationDetails(
+    'spider_mind_reminders_v2',
+    'Spider Mind Reminders & Alarms',
+    channelDescription: 'Floating ringing reminders and timely due dates for your threads',
+    importance: Importance.max,
+    priority: Priority.max,
+    category: AndroidNotificationCategory.alarm,
+    audioAttributesUsage: AudioAttributesUsage.alarm,
+    playSound: true,
+    enableVibration: true,
+    vibrationPattern: _vibrationPattern,
+    fullScreenIntent: true,
+    visibility: NotificationVisibility.public,
+    color: const Color(0xFFFF2A44),
+    ledColor: const Color(0xFF32B4FF),
+    ledOnMs: 1000,
+    ledOffMs: 500,
+    enableLights: true,
+    actions: const [
       AndroidNotificationAction('action_done', 'Done', showsUserInterface: true),
       AndroidNotificationAction('action_snooze', 'Snooze 1h', showsUserInterface: false),
     ],
   );
-  static const _details = NotificationDetails(
+  static final _details = NotificationDetails(
     android: _channel,
-    iOS: DarwinNotificationDetails(categoryIdentifier: 'reminders'),
+    iOS: const DarwinNotificationDetails(
+      categoryIdentifier: 'reminders',
+      presentAlert: true,
+      presentSound: true,
+      presentBadge: true,
+    ),
   );
 
   Future<void> init() async {
@@ -84,6 +103,27 @@ class NotificationService {
     final launch = await _plugin.getNotificationAppLaunchDetails();
     if (launch?.didNotificationLaunchApp == true) launchPayload = launch?.notificationResponse?.payload;
     _ready = true;
+
+    final android = _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+    if (android != null) {
+      await android.createNotificationChannel(
+        AndroidNotificationChannel(
+          'spider_mind_reminders_v2',
+          'Spider Mind Reminders & Alarms',
+          description: 'Floating ringing reminders and timely due dates for your threads',
+          importance: Importance.max,
+          playSound: true,
+          enableVibration: true,
+          vibrationPattern: _vibrationPattern,
+          enableLights: true,
+          ledColor: const Color(0xFF32B4FF),
+          audioAttributesUsage: AudioAttributesUsage.alarm,
+        ),
+      );
+      await android.requestNotificationsPermission();
+      await android.requestExactAlarmsPermission();
+    }
+
     await refreshHealth();
   }
 

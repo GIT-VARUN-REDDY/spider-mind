@@ -283,6 +283,10 @@ class AppState extends ChangeNotifier {
         clientId: kIsWeb ? '493865528762-6g4edvbovdsmaai2q14rtfccv4icase5.apps.googleusercontent.com' : null,
         scopes: ['email', 'profile'],
       );
+      // Disconnect/sign out any cached account so Google always shows the account chooser dialog
+      try {
+        await googleSignIn.signOut();
+      } catch (_) {}
       final account = await googleSignIn.signIn();
       if (account == null) {
         _busy = false;
@@ -342,6 +346,9 @@ class AppState extends ChangeNotifier {
         await _api.call('POST', '/auth/logout', body: {'refreshToken': r}, auth: false);
       } catch (_) {}
     }
+    try {
+      await GoogleSignIn().signOut();
+    } catch (_) {}
     await _finishSignOut();
   }
 
