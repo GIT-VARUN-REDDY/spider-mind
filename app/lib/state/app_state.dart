@@ -710,6 +710,14 @@ class AppState extends ChangeNotifier {
     var u = url.trim();
     if (u.endsWith('/')) u = u.substring(0, u.length - 1);
     if (u.isEmpty) return;
+    if (!u.startsWith('http://') && !u.startsWith('https://')) {
+      u = 'https://$u';
+    }
+    // Render and remote cloud providers enforce HTTPS: upgrade http to https
+    final isLocal = u.contains('localhost') || u.contains('10.0.2.2') || u.contains('127.0.0.1') || u.contains('192.168.');
+    if (!isLocal && u.startsWith('http://')) {
+      u = u.replaceFirst('http://', 'https://');
+    }
     _serverUrl = u;
     _api.baseUrl = u;
     await _store.setServerUrl(u);

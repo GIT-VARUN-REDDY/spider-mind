@@ -52,6 +52,16 @@ class ApiClient {
       final req = http.Request(method, _uri(path, query))..headers.addAll(headers);
       if (body != null) req.body = jsonEncode(body);
       res = await http.Response.fromStream(await _http.send(req).timeout(const Duration(seconds: 20)));
+
+      // Transparently follow HTTP redirects (e.g. Render HTTP->HTTPS 307 redirect)
+      if ((res.statusCode == 301 || res.statusCode == 302 || res.statusCode == 307 || res.statusCode == 308) &&
+          res.headers.containsKey('location')) {
+        final loc = res.headers['location']!;
+        final redirectUri = Uri.parse(loc).isAbsolute ? Uri.parse(loc) : _uri(loc);
+        final redirectReq = http.Request(method, redirectUri)..headers.addAll(headers);
+        if (body != null) redirectReq.body = jsonEncode(body);
+        res = await http.Response.fromStream(await _http.send(redirectReq).timeout(const Duration(seconds: 20)));
+      }
     } on TimeoutException {
       throw ApiException(0, 'The server took too long to answer.');
     } catch (_) {
