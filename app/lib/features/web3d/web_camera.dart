@@ -1,0 +1,163 @@
+import 'dart:math' as math;
+
+import 'web_layout.dart';
+
+/// Result of projecting one world point to the screen.
+class ProjectedPoint {
+  const ProjectedPoint(this.x, this.y, this.scale, this.depth, this.visible);
+
+  final double x;
+  final double y;
+
+  /// Pixels per world unit at this point (perspective: nearer = larger).
+  final double scale;
+
+  /// Distance from the eye along the view axis; larger = farther.
+  final double depth;
+  final bool visible;
+}
+
+/// Pure-Dart perspective camera for the web. World: x right, y up (in the
+/// web plane), z = priority height. `pitch` is the tilt from a top-down view
+/// (0 = straight down, ~pi/2 = edge on). The camera keeps a current and a
+/// target state so gestures and `fit` can animate smoothly.
+class WebCamera {
+  WebCamera({
+    this.width = 1,
+    this.height = 1,
+    double yaw = 0,
+    double pitch = defaultPitch,
+    double distance = 30,
+    double panX = 0,
+    double panY = 0,
+  })  : yaw = yaw,
+        pitch = pitch,
+        distance = distance,
+        panX = panX,
+        panY = panY,
+        tYaw = yaw,
+        tPitch = pitch,
+        tDistance = distance,
+        tPanX = panX,
+        tPanY = panY;
+
+  /// About 50 degrees of tilt: the whole web reads as a structure.
+  static const double defaultPitch = 0.87;
+  static const double minPitch = 0.12;
+  static const double maxPitch = 1.45;
+
+  double width;
+  double height;
+  double yaw;
+  double pitch;
+  double distance;
+  double panX;
+  double panY;
+  double tYaw;
+  double tPitch;
+  double tDistance;
+  double tPanX;
+  double tPanY;
+
+  /// Distance that frames the whole web (set by [fit]); zoom limits derive from it.
+  double fitDistance = 30;
+
+  double get focal => math.min(width, height) * 1.1;
+  double get minDistance => fitDistance * 0.12;
+  double get maxDistance => fitDistance * 2.2;
+
+  /// 1 = framed to fit, >1 = zoomed in.
+  double get zoomLevel => fitDistance / distance;
+
+  ProjectedPoint project(double x, double y, double z) {
+    final dx = x - panX;
+    final dy = y - panY;
+    final cy = math.cos(yaw);
+    final sy = math.sin(yaw);
+    final x1 = dx * cy - dy * sy;
+    final y1 = dx * sy + dy * cy;
+    final cp = math.cos(pitch);
+    final sp = math.sin(pitch);
+    final up = y1 * cp + z * sp;
+    final toward = z * cp - y1 * sp;
+    final zc = distance - toward;
+    if (zc < 0.5) return ProjectedPoint(width / 2, height / 2, 0, zc, false);
+    final s = focal / zc;
+    return ProjectedPoint(width / 2 + x1 * s, height / 2 - up * s, s, zc, true);
+  }
+
+  /// Frames a disc of [radius] (world units) with margin, at the default tilt.
+  void fit(double radius, {bool animate = true}) {
+    final r = math.max(radius, 1.0) * 1.12;
+    final cp = math.cos(defaultPitch);
+    final sx = 0.47 * width / r;
+    final sy = 0.47 * height / (r * math.max(cp, 0.35) + r * 0.25);
+    final s = math.max(math.min(sx, sy), 1e-3);
+    final d = math.max(focal / s, r * 1.8);
+    fitDistance = d;
+    tDistance = d;
+    tPitch = defaultPitch;
+    tPanX = 0;
+    tPanY = 0;
+    if (!animate) _snap();
+  }
+
+  void orbit(double dxPx, double dyPx) {
+    tYaw -= dxPx * 0.008;
+    tPitch = (tPitch + dyPx * 0.006).clamp(minPitch, maxPitch).toDouble();
+  }
+
+  void zoomBy(double factor) {
+    if (factor <= 0) return;
+    tDistance = (tDistance / factor).clamp(minDistance, maxDistance).toDouble();
+  }
+
+  /// Drag the content by a screen delta (the point under the finger follows it).
+  void panBy(double dxPx, double dyPx) {
+    final s = focal / math.max(distance, 0.5);
+    final vx = -dxPx / s;
+    final vy = dyPx / (s * math.max(math.cos(pitch), 0.2));
+    final cy = math.cos(yaw);
+    final sy = math.sin(yaw);
+    tPanX += vx * cy + vy * sy;
+    tPanY += -vx * sy + vy * cy;
+  }
+
+  void focusOn(Vec3 p, {double zoom = 2.4}) {
+    tPanX = p.x;
+    tPanY = p.y;
+    tDistance = (fitDistance / zoom).clamp(minDistance, maxDistance).toDouble();
+  }
+
+  /// Advances the animation. Returns true while still moving.
+  bool step(double dt) {
+    final k = 1 - math.exp(-9 * dt);
+    yaw += (tYaw - yaw) * k;
+    pitch += (tPitch - pitch) * k;
+    distance += (tDistance - distance) * k;
+    panX += (tPanX - panX) * k;
+    panY += (tPanY - panY) * k;
+    if (!isMoving) {
+      _snap();
+      return false;
+    }
+    return true;
+  }
+
+  bool get isMoving =>
+      (tYaw - yaw).abs() > 1e-3 ||
+      (tPitch - pitch).abs() > 1e-3 ||
+      (tDistance - distance).abs() > 1e-2 * math.max(1.0, distance * 0.05) ||
+      (tPanX - panX).abs() > 1e-3 ||
+      (tPanY - panY).abs() > 1e-3;
+
+  void _snap() {
+    yaw = tYaw;
+    pitch = tPitch;
+    distance = tDistance;
+    panX = tPanX;
+    panY = tPanY;
+  }
+
+  void snapNow() => _snap();
+}

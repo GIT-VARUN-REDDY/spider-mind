@@ -1,0 +1,16 @@
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  errors:
+    # The 3D scene mutates and repaints without rebuilding widgets on purpose.
+    invalid_use_of_protected_member: ignore
+  exclude:
+    - build/**
+    - android/**
+    - ios/**
+    - web/**
+linter:
+  rules:
+    prefer_const_constructors: true
+    prefer_const_literals_to_create_immutables: true
+    avoid_print: true

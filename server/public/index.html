@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Spider Mind | Project Spider - 3D Thread & Goal Tracker</title>
+  <meta name="description" content="Project Spider: A task, idea and goal tracker organized on a structured 3D spider web with live multi-device tracking and timely reminders.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="theme-dark">
+  <div id="app" class="app-root">
+    <!-- Top Navigation Bar -->
+    <header class="app-header">
+      <div class="header-left">
+        <div class="brand">
+          <div class="brand-glyph">
+            <svg viewBox="0 0 32 32" fill="none" class="spider-logo">
+              <circle cx="16" cy="16" r="4" fill="#32B4FF"/>
+              <ellipse cx="16" cy="16" rx="9" ry="9" stroke="#32B4FF" stroke-width="1.2" stroke-dasharray="2 3"/>
+              <ellipse cx="16" cy="16" rx="14" ry="14" stroke="#32B4FF" stroke-width="0.8" stroke-opacity="0.4"/>
+              <line x1="16" y1="2" x2="16" y2="30" stroke="#FF2A44" stroke-width="1.5"/>
+              <line x1="2" y1="16" x2="30" y2="16" stroke="#3DDC97" stroke-width="1.2"/>
+              <line x1="6" y1="6" x2="26" y2="26" stroke="#8B5CF6" stroke-width="1"/>
+              <line x1="6" y1="26" x2="26" y2="6" stroke="#F59E0B" stroke-width="1"/>
+            </svg>
+          </div>
+          <div class="brand-text">
+            <span class="brand-title">SPIDER MIND</span>
+            <span class="brand-tag">PROJECT SPIDER</span>
+          </div>
+        </div>
+
+        <div id="connectionPill" class="status-pill status-offline">
+          <span class="status-dot"></span>
+          <span class="status-label">CONNECTING</span>
+        </div>
+      </div>
+
+      <!-- Spaces Filter Bar (visible on Web & Threads) -->
+      <div class="header-center">
+        <div id="spaceFilters" class="space-chips-container">
+          <!-- Dynamically populated space chips -->
+        </div>
+      </div>
+
+      <div class="header-right">
+        <!-- Search & keyword highlight -->
+        <div class="search-box">
+          <svg class="icon" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd" />
+          </svg>
+          <input type="text" id="keywordSearch" placeholder="Search keywords & tags..." autocomplete="off">
+          <button id="clearSearchBtn" class="clear-btn hidden">&times;</button>
+        </div>
+
+        <!-- Web Actions -->
+        <button id="legendBtn" class="btn-icon" title="3D Web Legend & Guide">
+          <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/></svg>
+        </button>
+
+        <button id="recenterBtn" class="btn-icon" title="Reset Camera / Fit Web">
+          <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd"/></svg>
+        </button>
+
+        <!-- New Thread Button -->
+        <button id="newThreadBtn" class="btn btn-primary btn-glow">
+          <span class="plus-icon">+</span>
+          <span>New Thread</span>
+        </button>
+
+        <!-- User Profile Dropdown Toggle -->
+        <div class="user-menu-wrapper">
+          <button id="userProfileBtn" class="user-avatar-btn">
+            <span id="userAvatarText">U</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main View Switcher -->
+    <main class="app-body">
+      <!-- 1. 3D WEB VIEW -->
+      <section id="viewWeb" class="view-panel active">
+        <div class="canvas-wrapper">
+          <canvas id="webCanvas"></canvas>
+          <div class="web-controls-hint">
+            <span>🖱️ Left drag: Orbit</span>
+            <span>Right / Shift drag: Pan</span>
+            <span>Scroll: Zoom</span>
+            <span>Double click: Fit</span>
+          </div>
+
+          <!-- Quick Selected Thread Floating Card -->
+          <div id="threadFloatCard" class="thread-float-card hidden">
+            <div class="float-card-header">
+              <span id="floatCardSpace" class="space-badge">Space</span>
+              <span id="floatCardType" class="type-badge">TASK</span>
+              <span id="floatCardPriority" class="priority-badge">HIGH</span>
+            </div>
+            <h3 id="floatCardTitle" class="float-card-title">Thread Title</h3>
+            <p id="floatCardNotes" class="float-card-notes"></p>
+            <div class="float-card-meta">
+              <span id="floatCardDue" class="due-badge">📅 Today</span>
+              <span id="floatCardChecklist" class="checklist-badge">✓ 2/3</span>
+            </div>
+            <div class="float-card-actions">
+              <button id="floatCardToggleStatus" class="btn btn-sm btn-secondary">Toggle Doing</button>
+              <button id="floatCardComplete" class="btn btn-sm btn-accent">Done</button>
+              <button id="floatCardOpen" class="btn btn-sm btn-primary">Edit</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2. THREADS LIST VIEW -->
+      <section id="viewThreads" class="view-panel">
+        <div class="threads-container">
+          <div class="threads-toolbar">
+            <div class="filter-group">
+              <span class="filter-label">Filter:</span>
+              <button class="filter-chip active" data-filter-type="all">All Types</button>
+              <button class="filter-chip" data-filter-type="task">Tasks</button>
+              <button class="filter-chip" data-filter-type="idea">Ideas</button>
+              <button class="filter-chip" data-filter-type="question">Questions</button>
+              <button class="filter-chip" data-filter-type="goal">Goals</button>
+            </div>
+            <div class="filter-group">
+              <button class="filter-chip active" data-filter-status="open">Active Only</button>
+              <button class="filter-chip" data-filter-status="all">All Status</button>
+              <button class="filter-chip" data-filter-status="done">Completed</button>
+            </div>
+          </div>
+
+          <div id="threadsListGrouped" class="threads-groups">
+            <!-- Dynamically populated thread sections: Overdue, Due Today, This Week, Later, No Date, Done -->
+          </div>
+        </div>
+      </section>
+
+      <!-- 3. INSIGHTS VIEW -->
+      <section id="viewInsights" class="view-panel">
+        <div class="insights-container">
+          <!-- Stats Top Grid -->
+          <div class="insights-stats-grid">
+            <div class="stat-card">
+              <div class="stat-header">
+                <span class="stat-title">Open Threads</span>
+                <span class="stat-icon">🕸️</span>
+              </div>
+              <div id="statOpenCount" class="stat-value">0</div>
+              <div id="statTotalSub" class="stat-sub">of 0 total threads</div>
+            </div>
+
+            <div class="stat-card streak-card">
+              <div class="stat-header">
+                <span class="stat-title">Current Streak</span>
+                <span class="stat-icon">🔥</span>
+              </div>
+              <div id="statStreak" class="stat-value">0 days</div>
+              <div class="stat-sub">Keep the momentum going</div>
+            </div>
+
+            <div class="stat-card">
+              <div class="stat-header">
+                <span class="stat-title">Due Today</span>
+                <span class="stat-icon">⚡</span>
+              </div>
+              <div id="statDueToday" class="stat-value">0</div>
+              <div id="statDueNext7" class="stat-sub">0 in next 7 days</div>
+            </div>
+
+            <div class="stat-card overdue-card">
+              <div class="stat-header">
+                <span class="stat-title">Overdue</span>
+                <span class="stat-icon">🚨</span>
+              </div>
+              <div id="statOverdue" class="stat-value">0</div>
+              <div class="stat-sub">Requires attention</div>
+            </div>
+          </div>
+
+          <!-- Highlight Cards: Next Move, Hub, Loose Ends -->
+          <div class="insights-highlights-grid">
+            <!-- Next Move -->
+            <div class="highlight-card next-move-card">
+              <div class="highlight-badge">RECOMMENDED NEXT MOVE</div>
+              <h3 id="nextMoveTitle" class="highlight-title">Calculating next move...</h3>
+              <p id="nextMoveReason" class="highlight-reason">Analyzing priority, web connectivity, and due dates.</p>
+              <div class="highlight-footer">
+                <button id="nextMoveOpenBtn" class="btn btn-sm btn-primary">Open Thread</button>
+              </div>
+            </div>
+
+            <!-- Web Hub -->
+            <div class="highlight-card hub-card">
+              <div class="highlight-badge">WEB HUB (MOST CONNECTED)</div>
+              <h3 id="hubTitle" class="highlight-title">No hub detected</h3>
+              <p id="hubReason" class="highlight-reason">Create threads with shared keywords or direct links.</p>
+              <div class="highlight-footer">
+                <button id="hubOpenBtn" class="btn btn-sm btn-secondary">View Hub</button>
+              </div>
+            </div>
+
+            <!-- Loose Ends -->
+            <div class="highlight-card loose-card">
+              <div class="highlight-badge">LOOSE ENDS</div>
+              <h3 id="looseCount" class="highlight-title">0 isolated threads</h3>
+              <p id="looseReason" class="highlight-reason">Threads with zero web connections. Consider linking them.</p>
+              <div class="highlight-footer">
+                <button id="looseViewBtn" class="btn btn-sm btn-secondary">Explore</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 14-day Completion Chart -->
+          <div class="chart-card">
+            <div class="chart-header">
+              <h3>14-Day Completion Activity</h3>
+              <span class="chart-sub">Daily completed threads</span>
+            </div>
+            <div id="completionBarsContainer" class="chart-bars">
+              <!-- Dynamically populated bars -->
+            </div>
+          </div>
+
+          <!-- Live Activity Log -->
+          <div class="activity-card">
+            <div class="activity-header">
+              <h3>Live Activity Timeline</h3>
+              <span class="activity-sub">Real-time sync across devices</span>
+            </div>
+            <div id="activityTimeline" class="activity-timeline">
+              <!-- Dynamically populated activities -->
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4. SETTINGS VIEW -->
+      <section id="viewSettings" class="view-panel">
+        <div class="settings-container">
+          <div class="settings-section">
+            <h2>Account & Profile</h2>
+            <div class="form-group-row">
+              <div class="form-group">
+                <label>Name</label>
+                <input type="text" id="settingName" placeholder="Your name">
+              </div>
+              <div class="form-group">
+                <label>Email</label>
+                <input type="email" id="settingEmail" readonly disabled>
+              </div>
+              <div class="form-group">
+                <label>Timezone</label>
+                <input type="text" id="settingTimezone" placeholder="e.g. UTC, America/New_York">
+              </div>
+            </div>
+            <button id="saveProfileBtn" class="btn btn-primary">Save Profile Changes</button>
+          </div>
+
+          <div class="settings-section">
+            <div class="section-header-flex">
+              <div>
+                <h2>Spaces Manager</h2>
+                <p class="section-sub">Spokes of your 3D web representing areas of life</p>
+              </div>
+              <button id="addSpaceBtn" class="btn btn-secondary btn-sm">+ Add New Space</button>
+            </div>
+            <div id="spacesManagerList" class="spaces-list">
+              <!-- Dynamically populated spaces list -->
+            </div>
+          </div>
+
+          <div class="settings-section">
+            <h2>Data & Export</h2>
+            <p class="section-sub">Download your entire 3D web, threads, spaces, and activity records in JSON format.</p>
+            <div class="actions-row">
+              <button id="exportJsonBtn" class="btn btn-secondary">
+                <svg viewBox="0 0 20 20" fill="currentColor" class="icon"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"/></svg>
+                Export Database (JSON)
+              </button>
+            </div>
+          </div>
+
+          <div class="settings-section danger-section">
+            <h2>Account Actions</h2>
+            <div class="actions-row">
+              <button id="signOutBtn" class="btn btn-secondary">Sign Out</button>
+              <button id="deleteAccountBtn" class="btn btn-danger">Delete Account & All Data</button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Bottom Navigation Tabs -->
+    <nav class="bottom-nav">
+      <button class="nav-tab active" data-tab="viewWeb">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="9"/><path d="M12 3v6M12 15v6M3 12h6M15 12h6"/></svg>
+        <span>3D Web</span>
+      </button>
+      <button class="nav-tab" data-tab="viewThreads">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+        <span>Threads</span>
+      </button>
+      <button class="nav-tab" data-tab="viewInsights">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
+        <span>Insights</span>
+      </button>
+      <button class="nav-tab" data-tab="viewSettings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+        <span>Settings</span>
+      </button>
+    </nav>
+
+    <!-- Thread Editor / Detail Modal -->
+    <div id="threadModal" class="modal-backdrop hidden">
+      <div class="modal-card modal-lg">
+        <div class="modal-header">
+          <h2 id="modalTitle">New Thread</h2>
+          <button id="closeThreadModalBtn" class="modal-close">&times;</button>
+        </div>
+        <form id="threadForm" class="modal-body">
+          <input type="hidden" id="threadId">
+          <div class="form-group">
+            <label for="threadTitleInput">Title *</label>
+            <input type="text" id="threadTitleInput" required placeholder="What needs to be done, remembered, or explored?" maxlength="200">
+          </div>
+
+          <div class="form-row-3">
+            <div class="form-group">
+              <label for="threadSpaceInput">Space (Spoke)</label>
+              <select id="threadSpaceInput" required>
+                <!-- Populated dynamically -->
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="threadTypeInput">Type (Shape)</label>
+              <select id="threadTypeInput">
+                <option value="task">Task (Circle)</option>
+                <option value="idea">Idea (Diamond)</option>
+                <option value="question">Question (Hexagon)</option>
+                <option value="goal">Goal (Star)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="threadPriorityInput">Priority (3D Depth)</label>
+              <select id="threadPriorityInput">
+                <option value="low">Low (Far)</option>
+                <option value="medium" selected>Medium (Center)</option>
+                <option value="high">High (Foreground)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-row-2">
+            <div class="form-group">
+              <label for="threadStatusInput">Status</label>
+              <select id="threadStatusInput">
+                <option value="todo">To Do</option>
+                <option value="doing">Doing (Active Arc)</option>
+                <option value="done">Done</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="threadDueInput">Due Date & Time (Urgency Ring)</label>
+              <input type="datetime-local" id="threadDueInput">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="threadNotesInput">Notes</label>
+            <textarea id="threadNotesInput" rows="3" placeholder="Context, details, links, or thoughts..." maxlength="2000"></textarea>
+          </div>
+
+          <!-- Reminders Section -->
+          <div class="form-group">
+            <div class="group-header-flex">
+              <label>Timely Reminders</label>
+              <div class="reminders-quick-presets">
+                <button type="button" class="btn-chip" id="presetDueTimeBtn">+ Due Time</button>
+                <button type="button" class="btn-chip" id="preset1HourBtn">+ 1h Before</button>
+                <button type="button" class="btn-chip" id="preset1DayBtn">+ 1d Before</button>
+              </div>
+            </div>
+            <div id="remindersContainer" class="reminders-list">
+              <!-- Dynamically populated reminders -->
+            </div>
+          </div>
+
+          <!-- Checklist Section -->
+          <div class="form-group">
+            <div class="group-header-flex">
+              <label>Checklist Items</label>
+              <button type="button" class="btn-chip" id="addChecklistItemBtn">+ Add Item</button>
+            </div>
+            <div id="checklistContainer" class="checklist-items-list">
+              <!-- Dynamically populated checklist items -->
+            </div>
+          </div>
+
+          <!-- Tags & Keywords -->
+          <div class="form-row-2">
+            <div class="form-group">
+              <label for="threadTagsInput">Manual Tags (comma separated)</label>
+              <input type="text" id="threadTagsInput" placeholder="project, ui, sprint-1">
+            </div>
+            <div class="form-group">
+              <label>Server-Derived Keywords (Weak Links)</label>
+              <div id="derivedKeywordsPreview" class="keywords-pill-cloud">
+                <span class="muted-text">Auto-calculated upon save</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Explicit Thread Links -->
+          <div class="form-group">
+            <label>Link to Other Threads (Strong Silk Strands)</label>
+            <select id="threadLinksSelect" multiple class="links-multi-select">
+              <!-- Dynamically populated from other threads -->
+            </select>
+            <small class="form-hint">Hold Ctrl / Cmd to select multiple connected threads.</small>
+          </div>
+
+          <div class="modal-footer">
+            <button type="button" id="deleteThreadBtn" class="btn btn-danger hidden">Delete Thread</button>
+            <div class="modal-footer-right">
+              <button type="button" id="cancelThreadModalBtn" class="btn btn-secondary">Cancel</button>
+              <button type="submit" class="btn btn-primary btn-glow">Save Thread</button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- 3D Web Legend Modal -->
+    <div id="legendModal" class="modal-backdrop hidden">
+      <div class="modal-card modal-md">
+        <div class="modal-header">
+          <h2>3D Web Visual Encoding</h2>
+          <button id="closeLegendModalBtn" class="modal-close">&times;</button>
+        </div>
+        <div class="modal-body legend-body">
+          <div class="legend-section">
+            <h4>1. Spokes = Spaces (Life Areas)</h4>
+            <p>Each space extends as a radial spoke of the spider web with its assigned color. The first space points directly up (12 o'clock), continuing clockwise.</p>
+          </div>
+          <div class="legend-section">
+            <h4>2. Rings = Urgency (Time Bands)</h4>
+            <div class="legend-ring-diagram">
+              <span class="ring-tag ring-now">NOW (Center)</span>
+              <span class="ring-arrow">➔</span>
+              <span class="ring-tag ring-week">THIS WEEK</span>
+              <span class="ring-arrow">➔</span>
+              <span class="ring-tag ring-month">THIS MONTH</span>
+              <span class="ring-arrow">➔</span>
+              <span class="ring-tag ring-later">LATER (Outer)</span>
+            </div>
+          </div>
+          <div class="legend-section">
+            <h4>3. Depth (Z-Axis) = Priority</h4>
+            <p><strong>High priority</strong> floats closest to you with vibrant glow. <strong>Medium</strong> sits on the baseline. <strong>Low</strong> sits deeper into the fog.</p>
+          </div>
+          <div class="legend-section">
+            <h4>4. Node Shapes = Type</h4>
+            <div class="shape-grid">
+              <div class="shape-item">
+                <svg viewBox="0 0 24 24" width="24" height="24"><circle cx="12" cy="12" r="8" fill="#32B4FF"/></svg>
+                <span>Task (Circle)</span>
+              </div>
+              <div class="shape-item">
+                <svg viewBox="0 0 24 24" width="24" height="24"><polygon points="12,3 21,12 12,21 3,12" fill="#3DDC97"/></svg>
+                <span>Idea (Diamond)</span>
+              </div>
+              <div class="shape-item">
+                <svg viewBox="0 0 24 24" width="24" height="24"><polygon points="12,2 20,7 20,17 12,22 4,17 4,7" fill="#F59E0B"/></svg>
+                <span>Question (Hexagon)</span>
+              </div>
+              <div class="shape-item">
+                <svg viewBox="0 0 24 24" width="24" height="24"><polygon points="12,2 15,9 22,9 17,14 19,21 12,17 5,21 7,14 2,9 9,9" fill="#FF2A44"/></svg>
+                <span>Goal (Star)</span>
+              </div>
+            </div>
+          </div>
+          <div class="legend-section">
+            <h4>5. Silk Strands (Connections)</h4>
+            <p><strong>Explicit links:</strong> Bright, curved silk threads connecting dependent nodes.<br>
+            <strong>Shared keywords:</strong> Dotted silk threads. When a node is selected, connected threads illuminate with flowing particle energy.</p>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button id="gotItLegendBtn" class="btn btn-primary">Got It</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Space Editor Modal -->
+    <div id="spaceModal" class="modal-backdrop hidden">
+      <div class="modal-card modal-sm">
+        <div class="modal-header">
+          <h2 id="spaceModalTitle">Edit Space</h2>
+          <button id="closeSpaceModalBtn" class="modal-close">&times;</button>
+        </div>
+        <form id="spaceForm" class="modal-body">
+          <input type="hidden" id="spaceId">
+          <div class="form-group">
+            <label for="spaceNameInput">Space Name</label>
+            <input type="text" id="spaceNameInput" required maxlength="40" placeholder="e.g. Health, Projects, Finance">
+          </div>
+          <div class="form-group">
+            <label for="spaceColorInput">Color (Hex)</label>
+            <div class="color-picker-row">
+              <input type="color" id="spaceColorInput" value="#32B4FF">
+              <div class="preset-colors">
+                <span class="color-swatch" style="background:#32B4FF" data-color="#32B4FF"></span>
+                <span class="color-swatch" style="background:#3DDC97" data-color="#3DDC97"></span>
+                <span class="color-swatch" style="background:#FF2A44" data-color="#FF2A44"></span>
+                <span class="color-swatch" style="background:#F59E0B" data-color="#F59E0B"></span>
+                <span class="color-swatch" style="background:#8B5CF6" data-color="#8B5CF6"></span>
+                <span class="color-swatch" style="background:#EC4899" data-color="#EC4899"></span>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" id="cancelSpaceModalBtn" class="btn btn-secondary">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save Space</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Auth Modal (Login / Register) -->
+    <div id="authModal" class="modal-backdrop hidden">
+      <div class="modal-card modal-sm">
+        <div class="modal-header">
+          <h2 id="authModalTitle">Welcome to Project Spider</h2>
+        </div>
+        <div class="auth-tabs">
+          <button id="tabLogin" class="auth-tab active">Sign In</button>
+          <button id="tabRegister" class="auth-tab">Create Account</button>
+        </div>
+        <form id="authForm" class="modal-body">
+          <div id="authNameGroup" class="form-group hidden">
+            <label for="authNameInput">Full Name</label>
+            <input type="text" id="authNameInput" placeholder="Spider Explorer">
+          </div>
+          <div class="form-group">
+            <label for="authEmailInput">Email</label>
+            <input type="email" id="authEmailInput" required placeholder="user@example.com">
+          </div>
+          <div class="form-group">
+            <label for="authPasswordInput">Password</label>
+            <input type="password" id="authPasswordInput" required minlength="8" placeholder="•••••••• (min 8 chars)">
+          </div>
+          <div id="authError" class="auth-error-msg hidden"></div>
+          <button type="submit" id="authSubmitBtn" class="btn btn-primary btn-block btn-glow">Sign In</button>
+          <button type="button" id="authGuestBtn" class="btn btn-secondary btn-block">⚡ Quick Demo / Guest Account</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Toast Notification Container -->
+    <div id="toastContainer" class="toast-container"></div>
+  </div>
+
+  <script src="socket.io.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
