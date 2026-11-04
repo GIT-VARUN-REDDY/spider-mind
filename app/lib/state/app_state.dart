@@ -281,7 +281,6 @@ class AppState extends ChangeNotifier {
     try {
       final googleSignIn = GoogleSignIn(
         clientId: kIsWeb ? '493865528762-6g4edvbovdsmaai2q14rtfccv4icase5.apps.googleusercontent.com' : null,
-        serverClientId: '493865528762-6g4edvbovdsmaai2q14rtfccv4icase5.apps.googleusercontent.com',
         scopes: ['email', 'profile'],
       );
       final account = await googleSignIn.signIn();
