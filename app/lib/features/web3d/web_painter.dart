@@ -35,6 +35,9 @@ class WebPainter extends CustomPainter {
   final WebScene scene;
   final WebCamera camera;
   final Map<String, TextPainter> _tp = {};
+  final Map<String, Offset> _spokeLabelPos = {};
+  final Map<int, Offset> _ringLabelPos = {};
+  bool isAnimatingLabels = false;
 
   TextPainter _text(String s, double size, Color c, {FontWeight w = FontWeight.w600, double spacing = 0}) {
     final key = '$s|$size|${c.toARGB32()}|${w.value}|$spacing';
@@ -79,6 +82,7 @@ class WebPainter extends CustomPainter {
     canvas.drawRect(Offset.zero & size, bg);
 
     if (layout.spokes.isEmpty) return;
+    isAnimatingLabels = false;
     final zoom = camera.zoomLevel;
     final placedLabelRects = <Rect>[];
 
@@ -120,7 +124,6 @@ class WebPainter extends CustomPainter {
       ];
 
       Offset chosenPos = pl;
-      Rect chosenRect = Rect.fromCenter(center: pl, width: tp.width + 10, height: tp.height + 6);
       var placed = false;
 
       for (final cand in candidates) {
@@ -128,7 +131,6 @@ class WebPainter extends CustomPainter {
         final inBounds = rect.right > 0 && rect.left < size.width && rect.bottom > 0 && rect.top < size.height;
         if (inBounds && !_rectOverlapsAny(rect, placedLabelRects, pad: 4.0)) {
           chosenPos = cand;
-          chosenRect = rect;
           placed = true;
           break;
         }
@@ -149,18 +151,28 @@ class WebPainter extends CustomPainter {
           if (overlapArea < minOverlap) {
             minOverlap = overlapArea;
             chosenPos = cand;
-            chosenRect = rect;
           }
         }
       }
 
+      // Ultra-smooth animated transition for spoke labels on collision.
+      Offset renderPos = chosenPos;
+      final prev = _spokeLabelPos[s.spaceId];
+      if (prev != null && !scene.reduceMotion && (prev - chosenPos).distance < 250) {
+        final d = (prev - chosenPos).distance;
+        if (d > 0.4) isAnimatingLabels = true;
+        renderPos = Offset.lerp(prev, chosenPos, 0.20)!;
+      }
+      _spokeLabelPos[s.spaceId] = renderPos;
+      final renderRect = Rect.fromCenter(center: renderPos, width: tp.width + 10, height: tp.height + 6);
+
       // If shifted away from the spoke tip, draw a subtle connector line.
-      if ((chosenPos - pl).distanceSquared > 16) {
-        canvas.drawLine(p1, chosenPos, Paint()..color = s.color.withValues(alpha: 0.22)..strokeWidth = 1.0);
+      if ((renderPos - pl).distanceSquared > 16) {
+        canvas.drawLine(p1, renderPos, Paint()..color = s.color.withValues(alpha: 0.22)..strokeWidth = 1.0);
       }
 
-      tp.paint(canvas, chosenPos - Offset(tp.width / 2, tp.height / 2));
-      placedLabelRects.add(chosenRect);
+      tp.paint(canvas, renderPos - Offset(tp.width / 2, tp.height / 2));
+      placedLabelRects.add(renderRect);
     }
 
     // Rings (urgency bands): paths.
@@ -208,7 +220,6 @@ class WebPainter extends CustomPainter {
       final nominalAngle = la + baseDelta;
 
       Offset chosenPos = _p(WebLayout.worldX(r, nominalAngle), WebLayout.worldY(r, nominalAngle), 0);
-      Rect chosenRect = Rect.fromCenter(center: chosenPos, width: tp.width + 10, height: tp.height + 6);
       var placed = false;
 
       for (final nudge in nudges) {
@@ -221,7 +232,6 @@ class WebPainter extends CustomPainter {
 
         if (!_rectOverlapsAny(candRect, placedLabelRects, pad: 2.0)) {
           chosenPos = candPos;
-          chosenRect = candRect;
           placed = true;
           break;
         }
@@ -248,20 +258,30 @@ class WebPainter extends CustomPainter {
           if (overlap < minOverlap) {
             minOverlap = overlap;
             chosenPos = candPos;
-            chosenRect = candRect;
           }
         }
       }
 
+      // Ultra-smooth animated transition for ring labels on collision.
+      Offset renderPos = chosenPos;
+      final prev = _ringLabelPos[ring.band.index];
+      if (prev != null && !scene.reduceMotion && (prev - chosenPos).distance < 250) {
+        final d = (prev - chosenPos).distance;
+        if (d > 0.4) isAnimatingLabels = true;
+        renderPos = Offset.lerp(prev, chosenPos, 0.20)!;
+      }
+      _ringLabelPos[ring.band.index] = renderPos;
+      final renderRect = Rect.fromCenter(center: renderPos, width: tp.width + 10, height: tp.height + 6);
+
       // Draw subtle backing pill for readability over orbit lines.
-      final pillRect = Rect.fromCenter(center: chosenPos, width: tp.width + 8, height: tp.height + 4);
+      final pillRect = Rect.fromCenter(center: renderPos, width: tp.width + 8, height: tp.height + 4);
       canvas.drawRRect(
         RRect.fromRectAndRadius(pillRect, const Radius.circular(5)),
         Paint()..color = (dark ? const Color(0xFF060913) : Colors.white).withValues(alpha: 0.72),
       );
 
-      tp.paint(canvas, chosenPos - Offset(tp.width / 2, tp.height / 2));
-      placedLabelRects.add(chosenRect);
+      tp.paint(canvas, renderPos - Offset(tp.width / 2, tp.height / 2));
+      placedLabelRects.add(renderRect);
     }
 
     // Edges.

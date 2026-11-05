@@ -163,6 +163,7 @@ class _WebView3DState extends State<WebView3D> with SingleTickerProviderStateMix
 
   bool get _needsAnimation {
     if (_cam.isMoving) return true;
+    if (_painter.isAnimatingLabels) return true;
     if (widget.reduceMotion) return _scene.flashStart.isNotEmpty;
     return true;
   }
