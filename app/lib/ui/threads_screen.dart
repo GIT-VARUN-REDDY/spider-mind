@@ -27,7 +27,7 @@ class _ThreadsScreenState extends State<ThreadsScreen> {
   List<(String, List<Thread>)> _groups(List<Thread> all) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final g = <String, List<Thread>>{for (final k in ['Overdue', 'Today', 'This week', 'Later', 'No date', 'Done']) k: []};
+    final g = <String, List<Thread>>{for (final k in ['Overdue', 'Today', 'This week', 'This month', 'Next month', 'This year', 'Later', 'No date', 'Done']) k: []};
     for (final t in all) {
       if (t.isDone) {
         g['Done']!.add(t);
@@ -40,7 +40,21 @@ class _ThreadsScreenState extends State<ThreadsScreen> {
         g['Overdue']!.add(t);
       } else {
         final days = DateTime(d.year, d.month, d.day).difference(today).inDays;
-        g[days == 0 ? 'Today' : days <= 7 ? 'This week' : 'Later']!.add(t);
+        final nextMonthYear = today.month == 12 ? today.year + 1 : today.year;
+        final nextMonth = today.month == 12 ? 1 : today.month + 1;
+        if (days == 0) {
+          g['Today']!.add(t);
+        } else if (days <= 7) {
+          g['This week']!.add(t);
+        } else if (d.year == today.year && d.month == today.month) {
+          g['This month']!.add(t);
+        } else if (d.year == nextMonthYear && d.month == nextMonth) {
+          g['Next month']!.add(t);
+        } else if (d.year == today.year) {
+          g['This year']!.add(t);
+        } else {
+          g['Later']!.add(t);
+        }
       }
     }
     for (final l in g.values) {

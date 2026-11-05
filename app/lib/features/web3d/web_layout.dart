@@ -266,18 +266,20 @@ class WebLayout {
       UrgencyBand.now,
       UrgencyBand.week,
       UrgencyBand.month,
+      UrgencyBand.nextMonth,
+      UrgencyBand.year,
       UrgencyBand.later,
       if (showDone) UrgencyBand.done,
     ];
     final cells = <int, List<Thread>>{};
     for (var i = 0; i < visible.length; i++) {
-      final key = visSpoke[i] * 8 + visBand[i].index;
+      final key = visSpoke[i] * 16 + visBand[i].index;
       cells.putIfAbsent(key, () => <Thread>[]).add(visible[i]);
     }
     final maxRows = <int, int>{}; // band index -> rows
     for (final e in cells.entries) {
       e.value.sort(_cellCompare);
-      final band = e.key % 8;
+      final band = e.key % 16;
       final rows = (e.value.length + WebMetrics.rowSize - 1) ~/ WebMetrics.rowSize;
       final cur = maxRows[band] ?? 0;
       if (rows > cur) maxRows[band] = rows;
@@ -304,8 +306,8 @@ class WebLayout {
     final cellKeys = cells.keys.toList()..sort();
     for (final key in cellKeys) {
       final list = cells[key]!;
-      final spokeIdx = key ~/ 8;
-      final bandIdx = key % 8;
+      final spokeIdx = key ~/ 16;
+      final bandIdx = key % 16;
       final ring = ringOfBand[bandIdx];
       if (ring == null || spokeIdx >= spokes.length) continue;
       final spokeAngle = spokes[spokeIdx].angle;
