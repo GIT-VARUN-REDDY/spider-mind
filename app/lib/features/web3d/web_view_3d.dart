@@ -64,6 +64,7 @@ class _WebView3DState extends State<WebView3D> with SingleTickerProviderStateMix
   bool _hasFit = false;
   double _lastScale = 1;
   double _lastRotation = 0;
+  Offset? _lastTouchPos;
   Size _size = Size.zero;
 
   @override
@@ -219,9 +220,11 @@ class _WebView3DState extends State<WebView3D> with SingleTickerProviderStateMix
               _cam.pitchVelocity = 0;
               _lastScale = 1;
               _lastRotation = 0;
+              _lastTouchPos = d.localFocalPoint;
               _kick();
             },
             onScaleUpdate: (d) {
+              _lastTouchPos = d.localFocalPoint;
               if (d.pointerCount >= 2) {
                 _cam.panBy(d.focalPointDelta.dx, d.focalPointDelta.dy);
                 if (_lastScale > 0) _cam.zoomBy(d.scale / _lastScale);
@@ -232,7 +235,7 @@ class _WebView3DState extends State<WebView3D> with SingleTickerProviderStateMix
                   _cam.twoFingerRotate(dRot);
                 }
               } else {
-                _cam.orbit(d.focalPointDelta.dx, d.focalPointDelta.dy);
+                _cam.orbit(d.focalPointDelta.dx, d.focalPointDelta.dy, touchPos: d.localFocalPoint);
               }
               if (widget.reduceMotion) _cam.snapNow();
               _kick();
@@ -240,7 +243,11 @@ class _WebView3DState extends State<WebView3D> with SingleTickerProviderStateMix
             onScaleEnd: (d) {
               _cam.isDragging = false;
               if (!widget.reduceMotion) {
-                _cam.fling(d.velocity.pixelsPerSecond.dx, d.velocity.pixelsPerSecond.dy);
+                _cam.fling(
+                  d.velocity.pixelsPerSecond.dx,
+                  d.velocity.pixelsPerSecond.dy,
+                  touchPos: _lastTouchPos,
+                );
               }
               _kick();
             },

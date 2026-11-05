@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:ui' show Offset;
 
 import 'web_layout.dart';
 
@@ -111,10 +112,37 @@ class WebCamera {
     if (!animate) _snap();
   }
 
-  /// Orbit rotation with natural direction (sliding left moves web left, sliding right moves web right, sliding up/down tilts naturally).
-  void orbit(double dxPx, double dyPx) {
-    final dYaw = dxPx * 0.0075;
-    final dPitch = -dyPx * 0.0055;
+  /// Orbit rotation with natural direction.
+  /// When [touchPos] is provided, uses circular turntable physics so dragging along the rim
+  /// (e.g. up-to-down on right side, right-to-left on upper rim) rotates the web in the direction of the finger.
+  void orbit(double dxPx, double dyPx, {Offset? touchPos}) {
+    double dYaw = -dxPx * 0.0075;
+    double dPitch = -dyPx * 0.0055;
+
+    if (touchPos != null && width > 0 && height > 0) {
+      final cx = width / 2.0;
+      final cy = height / 2.0;
+      final rx = touchPos.dx - cx;
+      final ry = touchPos.dy - cy;
+      final rRef = math.max(math.min(width, height) * 0.42, 60.0);
+      final dist = math.sqrt(rx * rx + ry * ry);
+
+      // Tangential turntable torque:
+      // - Right side (rx > 0): dragging down (dyPx > 0) decreases yaw -> right rim moves DOWN with finger.
+      // - Left side (rx < 0): dragging down (dyPx > 0) increases yaw -> left rim moves DOWN with finger.
+      // - Top rim (ry < 0): dragging left (dxPx < 0) increases yaw -> upper web moves LEFT with finger.
+      final tangentialYaw = (dxPx * (ry / rRef) - dyPx * (rx / rRef)) * 0.0075;
+
+      // When dragging on the sides / perimeter, tangential rotation dominates
+      // and pitch tilt is suppressed so rim sliding rotates cleanly.
+      final sideWeight = (dist / rRef - 0.25).clamp(0.0, 0.75) / 0.75;
+      dYaw = (1.0 - sideWeight) * dYaw + sideWeight * tangentialYaw;
+
+      // Pitch tilting is strongest near the center of the web.
+      final centerFactor = (1.0 - (rx.abs() / rRef)).clamp(0.0, 1.0);
+      dPitch *= centerFactor;
+    }
+
     tYaw += dYaw;
     tPitch = (tPitch + dPitch).clamp(minPitch, maxPitch).toDouble();
     if (isDragging) {
@@ -133,9 +161,28 @@ class WebCamera {
   }
 
   /// Fling momentum on touch release for buttery smooth inertial coasting.
-  void fling(double vxPx, double vyPx) {
-    yawVelocity = (vxPx * 0.0075).clamp(-16.0, 16.0);
-    pitchVelocity = (-vyPx * 0.0055).clamp(-6.0, 6.0);
+  void fling(double vxPx, double vyPx, {Offset? touchPos}) {
+    double vYaw = -vxPx * 0.0075;
+    double vPitch = -vyPx * 0.0055;
+
+    if (touchPos != null && width > 0 && height > 0) {
+      final cx = width / 2.0;
+      final cy = height / 2.0;
+      final rx = touchPos.dx - cx;
+      final ry = touchPos.dy - cy;
+      final rRef = math.max(math.min(width, height) * 0.42, 60.0);
+      final dist = math.sqrt(rx * rx + ry * ry);
+
+      final tangentialYaw = (vxPx * (ry / rRef) - vyPx * (rx / rRef)) * 0.0075;
+      final sideWeight = (dist / rRef - 0.25).clamp(0.0, 0.75) / 0.75;
+      vYaw = (1.0 - sideWeight) * vYaw + sideWeight * tangentialYaw;
+
+      final centerFactor = (1.0 - (rx.abs() / rRef)).clamp(0.0, 1.0);
+      vPitch *= centerFactor;
+    }
+
+    yawVelocity = vYaw.clamp(-16.0, 16.0);
+    pitchVelocity = vPitch.clamp(-6.0, 6.0);
   }
 
   void zoomBy(double factor) {
