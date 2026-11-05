@@ -620,62 +620,73 @@ class _WebTabState extends State<WebTab> {
   Widget build(BuildContext context) {
     final s = context.watch<AppState>();
     final selected = _selected == null ? null : s.threadById(_selected!);
-    return Stack(children: [
-      Positioned.fill(
-        child: WebView3D(
-          threads: s.threads,
-          spaces: s.spaces,
-          controller: _ctl,
-          selectedId: selected?.id,
-          flashIds: s.flashIds,
-          showDone: s.settings.showDone,
-          hiddenSpaceIds: Set.of(_hidden),
-          highlightKeyword: _search && _kw.trim().isNotEmpty ? _kw.trim() : null,
-          reduceMotion: s.settings.reduceMotion,
-          lowGraphics: s.settings.lowGraphics,
-          onSelect: (id) => setState(() => _selected = id),
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      decoration: BoxDecoration(
+        gradient: RadialGradient(
+          colors: dark ? const [Color(0xFF111833), Color(0xFF03040A)] : const [Color(0xFFF4F7FF), Color(0xFFDDE5F5)],
+          radius: 0.95,
         ),
       ),
-      SafeArea(
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 8, 0),
-            child: Row(children: [
-              const Text('Your web', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
-              const SizedBox(width: 10),
-              _LinkPill(s),
-              const Spacer(),
-              IconButton(tooltip: 'Search by keyword', icon: Icon(_search ? Icons.search_off : Icons.search), onPressed: () => setState(() { _search = !_search; _kw = ''; })),
-              IconButton(tooltip: 'What do the shapes mean?', icon: const Icon(Icons.info_outline), onPressed: () => showWebLegend(context)),
-              IconButton(tooltip: 'Fit everything', icon: const Icon(Icons.center_focus_strong_outlined), onPressed: _ctl.resetView),
+      child: Stack(children: [
+        Column(children: [
+          SafeArea(
+            bottom: false,
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 8, 0),
+                child: Row(children: [
+                  const Text('Your web', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
+                  const SizedBox(width: 10),
+                  _LinkPill(s),
+                  const Spacer(),
+                  IconButton(tooltip: 'Search by keyword', icon: Icon(_search ? Icons.search_off : Icons.search), onPressed: () => setState(() { _search = !_search; _kw = ''; })),
+                  IconButton(tooltip: 'What do the shapes mean?', icon: const Icon(Icons.info_outline), onPressed: () => showWebLegend(context)),
+                  IconButton(tooltip: 'Fit everything', icon: const Icon(Icons.center_focus_strong_outlined), onPressed: _ctl.resetView),
+                ]),
+              ),
+              if (_search)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                  child: TextField(autofocus: true, decoration: const InputDecoration(hintText: 'Highlight a keyword', prefixIcon: Icon(Icons.search)), onChanged: (v) => setState(() => _kw = v)),
+                ),
+              SizedBox(
+                height: 46,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  children: [
+                    for (final sp in s.spaces)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                        child: FilterChip(
+                          avatar: CircleAvatar(backgroundColor: sp.color, radius: 6),
+                          label: Text(sp.name),
+                          selected: !_hidden.contains(sp.id),
+                          onSelected: (on) => setState(() => on ? _hidden.remove(sp.id) : _hidden.add(sp.id)),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
             ]),
           ),
-          if (_search)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-              child: TextField(autofocus: true, decoration: const InputDecoration(hintText: 'Highlight a keyword', prefixIcon: Icon(Icons.search)), onChanged: (v) => setState(() => _kw = v)),
-            ),
-          SizedBox(
-            height: 46,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              children: [
-                for (final sp in s.spaces)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-                    child: FilterChip(
-                      avatar: CircleAvatar(backgroundColor: sp.color, radius: 6),
-                      label: Text(sp.name),
-                      selected: !_hidden.contains(sp.id),
-                      onSelected: (on) => setState(() => on ? _hidden.remove(sp.id) : _hidden.add(sp.id)),
-                    ),
-                  ),
-              ],
+          Expanded(
+            child: WebView3D(
+              threads: s.threads,
+              spaces: s.spaces,
+              controller: _ctl,
+              selectedId: selected?.id,
+              flashIds: s.flashIds,
+              showDone: s.settings.showDone,
+              hiddenSpaceIds: Set.of(_hidden),
+              highlightKeyword: _search && _kw.trim().isNotEmpty ? _kw.trim() : null,
+              reduceMotion: s.settings.reduceMotion,
+              lowGraphics: s.settings.lowGraphics,
+              onSelect: (id) => setState(() => _selected = id),
             ),
           ),
         ]),
-      ),
       if (s.threads.isEmpty)
         Center(
           child: Padding(
@@ -700,9 +711,10 @@ class _WebTabState extends State<WebTab> {
           IconButton.filledTonal(tooltip: 'Zoom out', icon: const Icon(Icons.remove), onPressed: () => _ctl.zoomBy(1 / 1.4)),
         ]),
       ),
-      if (selected != null)
-        Positioned(left: 12, right: 12, bottom: 84, child: _SelectedCard(thread: selected, onFocus: () => _ctl.focusOn(selected.id), onClose: () => setState(() => _selected = null))),
-    ]);
+        if (selected != null)
+          Positioned(left: 12, right: 12, bottom: 84, child: _SelectedCard(thread: selected, onFocus: () => _ctl.focusOn(selected.id), onClose: () => setState(() => _selected = null))),
+      ]),
+    );
   }
 }
 

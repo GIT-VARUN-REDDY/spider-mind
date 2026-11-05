@@ -62,7 +62,7 @@ class _Legend extends StatelessWidget {
             row(const Icon(Icons.timeline, color: kBlue), 'Solid curved strand', 'You linked these two threads.'),
             row(const Icon(Icons.more_horiz, color: kBlue), 'Dotted strand', 'They share a keyword.'),
             head('Moving around'),
-            row(const Icon(Icons.touch_app, color: kBlue), 'Drag, pinch, two-finger drag', 'Rotate, zoom, pan. Double tap to fit everything.'),
+            row(const Icon(Icons.touch_app, color: kBlue), 'Drag, pinch, two-finger twist', 'Rotate, zoom, tilt. Double tap to fit everything.'),
           ],
         ),
       ),

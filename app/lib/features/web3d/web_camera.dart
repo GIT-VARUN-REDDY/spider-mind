@@ -124,6 +124,14 @@ class WebCamera {
     }
   }
 
+  /// Two-finger rotation.
+  void twoFingerRotate(double deltaRad) {
+    tYaw += deltaRad;
+    if (isDragging) {
+      yaw = tYaw;
+    }
+  }
+
   /// Fling momentum on touch release for buttery smooth inertial coasting.
   void fling(double vxPx, double vyPx) {
     yawVelocity = (vxPx * 0.0075).clamp(-16.0, 16.0);
@@ -156,8 +164,13 @@ class WebCamera {
   void focusOn(Vec3 p, {double zoom = 2.4}) {
     yawVelocity = 0;
     pitchVelocity = 0;
-    tPanX = p.x;
-    tPanY = p.y;
+    tPanX = 0;
+    tPanY = 0;
+    panX = 0;
+    panY = 0;
+    // Rotate web so target node faces front-and-center while ring center stays centered
+    final angle = math.atan2(p.y, p.x);
+    tYaw = -angle - math.pi / 2;
     tDistance = (fitDistance / zoom).clamp(minDistance, maxDistance).toDouble();
   }
 

@@ -63,6 +63,7 @@ class _WebView3DState extends State<WebView3D> with SingleTickerProviderStateMix
   Duration _last = Duration.zero;
   bool _hasFit = false;
   double _lastScale = 1;
+  double _lastRotation = 0;
   Size _size = Size.zero;
 
   @override
@@ -217,6 +218,7 @@ class _WebView3DState extends State<WebView3D> with SingleTickerProviderStateMix
               _cam.yawVelocity = 0;
               _cam.pitchVelocity = 0;
               _lastScale = 1;
+              _lastRotation = 0;
               _kick();
             },
             onScaleUpdate: (d) {
@@ -224,6 +226,11 @@ class _WebView3DState extends State<WebView3D> with SingleTickerProviderStateMix
                 _cam.panBy(d.focalPointDelta.dx, d.focalPointDelta.dy);
                 if (_lastScale > 0) _cam.zoomBy(d.scale / _lastScale);
                 _lastScale = d.scale;
+                final dRot = d.rotation - _lastRotation;
+                _lastRotation = d.rotation;
+                if (dRot.abs() > 0.001) {
+                  _cam.twoFingerRotate(dRot);
+                }
               } else {
                 _cam.orbit(d.focalPointDelta.dx, d.focalPointDelta.dy);
               }
