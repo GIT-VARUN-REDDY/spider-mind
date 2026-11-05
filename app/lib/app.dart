@@ -15,15 +15,15 @@ class SpiderApp extends StatelessWidget {
   Widget build(BuildContext context) {
     final mode = context.select<AppState, ThemeModeSetting>((s) => s.settings.theme);
     return MaterialApp(
-      title: 'Project Spider',
+      title: 'SpiderMind',
       debugShowCheckedModeBanner: false,
       navigatorKey: rootNavigatorKey,
-      theme: buildTheme(Brightness.light),
+      theme: buildTheme(Brightness.dark),
       darkTheme: buildTheme(Brightness.dark),
       themeMode: switch (mode) {
         ThemeModeSetting.light => ThemeMode.light,
         ThemeModeSetting.dark => ThemeMode.dark,
-        ThemeModeSetting.system => ThemeMode.system,
+        ThemeModeSetting.system => ThemeMode.dark,
       },
       home: const RootGate(),
     );

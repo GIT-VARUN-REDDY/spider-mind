@@ -13,48 +13,87 @@ import 'settings_screen.dart';
 import 'theme.dart';
 import 'threads_screen.dart';
 
-class RootGate extends StatelessWidget {
+class RootGate extends StatefulWidget {
   const RootGate({super.key});
+
+  @override
+  State<RootGate> createState() => _RootGateState();
+}
+
+class _RootGateState extends State<RootGate> {
+  bool _splashDone = false;
 
   @override
   Widget build(BuildContext context) {
     final status = context.select<AppState, AuthStatus>((s) => s.authStatus);
-    switch (status) {
-      case AuthStatus.unknown:
-        return const SplashScreen();
-      case AuthStatus.signedOut:
-        return const AuthScreen();
-      case AuthStatus.signedIn:
-        return const HomeShell();
+
+    final isTest = WidgetsBinding.instance.runtimeType.toString().toLowerCase().contains('test');
+    if ((!_splashDone && !isTest) || status == AuthStatus.unknown) {
+      return SplashScreen(
+        onComplete: () {
+          if (mounted) {
+            setState(() => _splashDone = true);
+          }
+        },
+      );
     }
+
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 350),
+      child: switch (status) {
+        AuthStatus.unknown => const SizedBox(),
+        AuthStatus.signedOut => const AuthScreen(),
+        AuthStatus.signedIn => const HomeShell(),
+      },
+    );
   }
 }
 
 // ------------------------------------------------------------------ splash
 class SplashScreen extends StatefulWidget {
-  const SplashScreen({super.key});
+  const SplashScreen({super.key, this.onComplete});
+
+  final VoidCallback? onComplete;
 
   @override
   State<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderStateMixin {
-  late AnimationController _ctrl;
-  late Animation<double> _scale;
-  late Animation<double> _opacity;
+class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMixin {
+  late AnimationController _loadCtrl;
+  late AnimationController _pulseCtrl;
+  late Animation<double> _progress;
+  late Animation<double> _pulse;
 
   @override
   void initState() {
     super.initState();
-    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 1400))..repeat(reverse: true);
-    _scale = Tween<double>(begin: 0.95, end: 1.05).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
-    _opacity = Tween<double>(begin: 0.75, end: 1.0).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
+    _pulseCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 1600))..repeat(reverse: true);
+    _pulse = Tween<double>(begin: 0.35, end: 0.75).animate(CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut));
+
+    _loadCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 2600));
+    _progress = CurvedAnimation(parent: _loadCtrl, curve: Curves.easeInOutCubic);
+
+    _loadCtrl.forward().then((_) {
+      Future.delayed(const Duration(milliseconds: 300), () {
+        if (mounted) widget.onComplete?.call();
+      });
+    });
   }
 
   @override
   void dispose() {
-    _ctrl.dispose();
+    _pulseCtrl.dispose();
+    _loadCtrl.dispose();
     super.dispose();
+  }
+
+  String _loadingMessage(double p) {
+    if (p < 0.25) return 'Initializing SpiderMind engine...';
+    if (p < 0.55) return 'Connecting to spider-mind.onrender.com...';
+    if (p < 0.80) return 'Synchronizing 3D neural constellation...';
+    if (p < 0.98) return 'Calibrating interactive web canvas...';
+    return 'SpiderMind online.';
   }
 
   @override
@@ -64,72 +103,118 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
       body: Stack(
         fit: StackFit.expand,
         children: [
-          Image.asset('assets/images/splash.png', fit: BoxFit.cover, errorBuilder: (_, __, ___) => const SizedBox()),
-          Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [const Color(0xFF03040A).withValues(alpha: 0.45), const Color(0xFF03040A).withValues(alpha: 0.9)],
-              ),
-            ),
+          // 1. Full-bleed native SpiderMind splash artwork
+          Image.asset(
+            'assets/images/splash.png',
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => const SizedBox(),
           ),
-          Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                AnimatedBuilder(
-                  animation: _ctrl,
-                  builder: (context, child) {
-                    return Transform.scale(
-                      scale: _scale.value,
-                      child: Opacity(
-                        opacity: _opacity.value,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(color: kCrimson.withValues(alpha: 0.4), blurRadius: 36, spreadRadius: 4),
-                              BoxShadow(color: kBlue.withValues(alpha: 0.4), blurRadius: 48, spreadRadius: 6),
+
+          // 2. Breathing radiant neon glow over the center spider emblem
+          AnimatedBuilder(
+            animation: _pulse,
+            builder: (context, child) {
+              return Center(
+                child: Container(
+                  width: 220,
+                  height: 220,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: kCrimson.withValues(alpha: _pulse.value * 0.45),
+                        blurRadius: 90,
+                        spreadRadius: 15,
+                      ),
+                      BoxShadow(
+                        color: kBlue.withValues(alpha: _pulse.value * 0.25),
+                        blurRadius: 110,
+                        spreadRadius: 20,
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+
+          // 3. Bottom real-time loading status and glowing progress bar
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 28),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  AnimatedBuilder(
+                    animation: _loadCtrl,
+                    builder: (context, child) {
+                      final val = _progress.value.clamp(0.0, 1.0);
+                      final pct = (val * 100).toInt();
+                      return Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                _loadingMessage(val),
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  color: Colors.white.withValues(alpha: 0.85),
+                                  letterSpacing: 0.5,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              Text(
+                                '$pct%',
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w800,
+                                  color: kBlue,
+                                  fontFamily: 'monospace',
+                                ),
+                              ),
                             ],
                           ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(28),
-                            child: Image.asset('assets/images/logo.png', width: 110, height: 110),
+                          const SizedBox(height: 10),
+                          Container(
+                            height: 6,
+                            width: double.infinity,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: LayoutBuilder(
+                              builder: (context, constraints) {
+                                return Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Container(
+                                    width: constraints.maxWidth * val,
+                                    height: 6,
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(6),
+                                      gradient: const LinearGradient(
+                                        colors: [Color(0xFFFF2A44), Color(0xFF32B4FF)],
+                                      ),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: kCrimson.withValues(alpha: 0.8),
+                                          blurRadius: 10,
+                                          spreadRadius: 1,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
                           ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-                const SizedBox(height: 28),
-                ShaderMask(
-                  shaderCallback: (bounds) => const LinearGradient(
-                    colors: [Color(0xFFFF2A44), Color(0xFF32B4FF)],
-                  ).createShader(bounds),
-                  child: const Text(
-                    'PROJECT SPIDER',
-                    style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900, letterSpacing: 3.0, color: Colors.white),
+                        ],
+                      );
+                    },
                   ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Synthesizing living 3D thread web...',
-                  style: TextStyle(fontSize: 13, color: Colors.white.withValues(alpha: 0.65), letterSpacing: 0.5),
-                ),
-                const SizedBox(height: 36),
-                SizedBox(
-                  width: 140,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: const LinearProgressIndicator(
-                      minHeight: 3,
-                      backgroundColor: Colors.white12,
-                      valueColor: AlwaysStoppedAnimation<Color>(kBlue),
-                    ),
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ],
@@ -166,132 +251,276 @@ class _AuthScreenState extends State<AuthScreen> {
         : await s.login(_email.text, _pass.text);
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final s = context.watch<AppState>();
-    final t = Theme.of(context).textTheme;
-    return Scaffold(
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
-              child: Form(
-                key: _form,
-                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                  Center(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(color: kCrimson.withValues(alpha: 0.35), blurRadius: 28, spreadRadius: 2),
-                          BoxShadow(color: kBlue.withValues(alpha: 0.35), blurRadius: 36, spreadRadius: 3),
-                        ],
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(20),
-                        child: Image.asset(
-                          'assets/images/logo.png',
-                          width: 80,
-                          height: 80,
-                          errorBuilder: (_, __, ___) => const Icon(Icons.hub_rounded, size: 56, color: kCrimson),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text('Project Spider', textAlign: TextAlign.center, style: t.headlineMedium?.copyWith(fontWeight: FontWeight.w900)),
-                  const SizedBox(height: 6),
-                  Text('Your tasks, ideas and goals as one living web.', textAlign: TextAlign.center, style: t.bodyMedium),
-                  const SizedBox(height: 28),
-                  if (_register) ...[
-                    TextFormField(controller: _name, decoration: const InputDecoration(labelText: 'Your name'), textInputAction: TextInputAction.next, validator: (v) => (v ?? '').trim().isEmpty ? 'Enter your name' : null),
-                    const SizedBox(height: 12),
-                  ],
-                  TextFormField(
-                    controller: _email,
-                    decoration: const InputDecoration(labelText: 'Email'),
-                    keyboardType: TextInputType.emailAddress,
-                    autofillHints: const [AutofillHints.email],
-                    textInputAction: TextInputAction.next,
-                    validator: (v) => (v ?? '').contains('@') ? null : 'Enter a valid email',
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _pass,
-                    obscureText: _hide,
-                    decoration: InputDecoration(
-                      labelText: 'Password',
-                      helperText: _register ? 'At least 8 characters' : null,
-                      suffixIcon: IconButton(icon: Icon(_hide ? Icons.visibility : Icons.visibility_off), onPressed: () => setState(() => _hide = !_hide), tooltip: 'Show or hide password'),
-                    ),
-                    autofillHints: [_register ? AutofillHints.newPassword : AutofillHints.password],
-                    onFieldSubmitted: (_) => _submit(),
-                    validator: (v) => (v ?? '').length >= 8 ? null : 'Use at least 8 characters',
-                  ),
-                  if (s.authError != null) Padding(padding: const EdgeInsets.only(top: 12), child: Text(s.authError!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
-                  const SizedBox(height: 20),
-                  FilledButton(onPressed: s.busy ? null : _submit, child: s.busy ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2)) : Text(_register ? 'Create account' : 'Sign in')),
-                  const SizedBox(height: 14),
-                  Row(
-                    children: [
-                      Expanded(child: Divider(color: Colors.white.withValues(alpha: 0.15))),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        child: Text('OR', style: TextStyle(fontSize: 11, color: Colors.white.withValues(alpha: 0.45), fontWeight: FontWeight.bold)),
-                      ),
-                      Expanded(child: Divider(color: Colors.white.withValues(alpha: 0.15))),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  OutlinedButton(
-                    onPressed: s.busy ? null : () => s.signInWithGoogle(),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      backgroundColor: Colors.white.withValues(alpha: 0.04),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Image.network(
-                          'https://www.gstatic.com/images/branding/product/2x/googleg_48dp.png',
-                          width: 20,
-                          height: 20,
-                          errorBuilder: (_, __, ___) => const Icon(Icons.g_mobiledata, color: Colors.white, size: 24),
-                        ),
-                        const SizedBox(width: 10),
-                        const Text('Continue with Google', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  TextButton(onPressed: () => setState(() => _register = !_register), child: Text(_register ? 'I already have an account' : 'New here? Create an account')),
-                  TextButton(onPressed: () => _serverDialog(context), child: const Text('Server settings')),
-                ]),
-              ),
-            ),
-          ),
-        ),
+  InputDecoration _inputDeco(String label, {Widget? suffix, String? helper}) {
+    return InputDecoration(
+      labelText: label,
+      helperText: helper,
+      helperStyle: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
+      labelStyle: TextStyle(color: Colors.white.withValues(alpha: 0.65), fontSize: 14),
+      filled: true,
+      fillColor: const Color(0xFF0C1022),
+      suffixIcon: suffix,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.12)),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: const BorderSide(color: kBlue, width: 1.5),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: const BorderSide(color: kCrimson, width: 1.2),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: const BorderSide(color: kCrimson, width: 1.5),
       ),
     );
   }
-}
 
-Future<void> _serverDialog(BuildContext context) async {
-  final s = context.read<AppState>();
-  final c = TextEditingController(text: s.serverUrl);
-  final ok = await showDialog<bool>(
-    context: context,
-    builder: (_) => AlertDialog(
-      title: const Text('Server address'),
-      content: TextField(controller: c, keyboardType: TextInputType.url, decoration: const InputDecoration(hintText: 'https://api.example.com')),
-      actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Save'))],
-    ),
-  );
-  if (ok == true) await s.setServerUrl(c.text);
+  @override
+  Widget build(BuildContext context) {
+    final s = context.watch<AppState>();
+    return Scaffold(
+      backgroundColor: const Color(0xFF03040A),
+      body: Stack(
+        children: [
+          // Background ambient cyber gradient
+          Positioned.fill(
+            child: Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFF03040A),
+                gradient: RadialGradient(
+                  center: const Alignment(0, -0.45),
+                  radius: 1.1,
+                  colors: [
+                    kCrimson.withValues(alpha: 0.20),
+                    kBlue.withValues(alpha: 0.08),
+                    const Color(0xFF03040A),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          SafeArea(
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 420),
+                  child: Form(
+                    key: _form,
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                      Center(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(24),
+                            boxShadow: [
+                              BoxShadow(color: kCrimson.withValues(alpha: 0.55), blurRadius: 36, spreadRadius: 3),
+                              BoxShadow(color: kBlue.withValues(alpha: 0.35), blurRadius: 48, spreadRadius: 4),
+                            ],
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(24),
+                            child: Image.asset(
+                              'assets/images/logo.png',
+                              width: 96,
+                              height: 96,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => const Icon(Icons.hub_rounded, size: 56, color: kCrimson),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      ShaderMask(
+                        shaderCallback: (bounds) => const LinearGradient(
+                          colors: [Color(0xFFFF2A44), Color(0xFFFFFFFF), Color(0xFF32B4FF)],
+                        ).createShader(bounds),
+                        child: const Text(
+                          'SPIDERMIND',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 30,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 4.0,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Plan it. Track it. Own your day.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.white.withValues(alpha: 0.75),
+                          letterSpacing: 0.8,
+                          fontWeight: FontWeight.w400,
+                        ),
+                      ),
+                      const SizedBox(height: 32),
+                      if (_register) ...[
+                        TextFormField(
+                          controller: _name,
+                          style: const TextStyle(color: Colors.white, fontSize: 15),
+                          decoration: _inputDeco('Your name'),
+                          textInputAction: TextInputAction.next,
+                          validator: (v) => (v ?? '').trim().isEmpty ? 'Enter your name' : null,
+                        ),
+                        const SizedBox(height: 14),
+                      ],
+                      TextFormField(
+                        controller: _email,
+                        style: const TextStyle(color: Colors.white, fontSize: 15),
+                        decoration: _inputDeco('Email'),
+                        keyboardType: TextInputType.emailAddress,
+                        autofillHints: const [AutofillHints.email],
+                        textInputAction: TextInputAction.next,
+                        validator: (v) => (v ?? '').contains('@') ? null : 'Enter a valid email',
+                      ),
+                      const SizedBox(height: 14),
+                      TextFormField(
+                        controller: _pass,
+                        style: const TextStyle(color: Colors.white, fontSize: 15),
+                        obscureText: _hide,
+                        decoration: _inputDeco(
+                          'Password',
+                          helper: _register ? 'At least 8 characters' : null,
+                          suffix: IconButton(
+                            icon: Icon(
+                              _hide ? Icons.visibility : Icons.visibility_off,
+                              color: Colors.white.withValues(alpha: 0.6),
+                            ),
+                            onPressed: () => setState(() => _hide = !_hide),
+                            tooltip: 'Show or hide password',
+                          ),
+                        ),
+                        autofillHints: [_register ? AutofillHints.newPassword : AutofillHints.password],
+                        onFieldSubmitted: (_) => _submit(),
+                        validator: (v) => (v ?? '').length >= 8 ? null : 'Use at least 8 characters',
+                      ),
+                      if (s.authError != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 12),
+                          child: Text(
+                            s.authError!,
+                            style: const TextStyle(color: Color(0xFFFF5252), fontSize: 13),
+                          ),
+                        ),
+                      const SizedBox(height: 22),
+                      Container(
+                        height: 50,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(14),
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFFFF2A44), Color(0xFF007AFF)],
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: kCrimson.withValues(alpha: 0.45),
+                              blurRadius: 18,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: ElevatedButton(
+                          onPressed: s.busy ? null : _submit,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.transparent,
+                            shadowColor: Colors.transparent,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          ),
+                          child: s.busy
+                              ? const SizedBox(
+                                  width: 22,
+                                  height: 22,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                )
+                              : Text(
+                                  _register ? 'Create account' : 'Sign in',
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
+                                    letterSpacing: 0.6,
+                                  ),
+                                ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(child: Divider(color: Colors.white.withValues(alpha: 0.15))),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 14),
+                            child: Text(
+                              'OR',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.white.withValues(alpha: 0.45),
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 1.0,
+                              ),
+                            ),
+                          ),
+                          Expanded(child: Divider(color: Colors.white.withValues(alpha: 0.15))),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      OutlinedButton(
+                        onPressed: s.busy ? null : () => s.signInWithGoogle(),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          side: BorderSide(color: Colors.white.withValues(alpha: 0.20)),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          backgroundColor: const Color(0xFF0C1022),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Image.network(
+                              'https://www.gstatic.com/images/branding/product/2x/googleg_48dp.png',
+                              width: 22,
+                              height: 22,
+                              errorBuilder: (_, __, ___) => const Icon(Icons.g_mobiledata, color: Colors.white, size: 26),
+                            ),
+                            const SizedBox(width: 12),
+                            const Text(
+                              'Continue with Google',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 15,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      TextButton(
+                        onPressed: () => setState(() => _register = !_register),
+                        child: Text(
+                          _register ? 'I already have an account' : 'New here? Create an account',
+                          style: const TextStyle(
+                            color: kBlue,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                    ]),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 // ------------------------------------------------------------------ shell

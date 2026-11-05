@@ -178,7 +178,8 @@ class AppState extends ChangeNotifier {
   Future<void> init() async {
     _store = await LocalStore.open();
     _settings = _store.settings;
-    _serverUrl = _store.serverUrl ?? kDefaultServerUrl;
+    _serverUrl = kDefaultServerUrl;
+    await _store.setServerUrl(kDefaultServerUrl);
     _api = ApiClient(baseUrl: _serverUrl, clientId: _store.clientId)
       ..onTokens = (t) {
         _store.writeTokens(t);

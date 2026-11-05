@@ -3,5 +3,4 @@ build/
 .flutter-plugins*
 .packages
 *.iml
-android/
 ios/

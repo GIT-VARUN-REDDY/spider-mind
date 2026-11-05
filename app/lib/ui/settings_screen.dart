@@ -69,7 +69,6 @@ class SettingsScreen extends StatelessWidget {
         ])),
         head('Data'),
         Card(child: Column(children: [
-          ListTile(leading: const Icon(Icons.cloud_outlined), title: const Text('Server address'), subtitle: Text(s.serverUrl), onTap: () => _server(context, s)),
           ListTile(leading: const Icon(Icons.download_outlined), title: const Text('Copy my data as JSON'), onTap: () { Clipboard.setData(ClipboardData(text: s.exportJson())); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Copied to clipboard'))); }),
           ListTile(leading: const Icon(Icons.sync), title: const Text('Sync now'), subtitle: Text(s.lastSyncAt == null ? 'Not synced yet' : 'Last synced ${fmtDue(s.lastSyncAt)}'), onTap: s.refresh),
         ])),
@@ -96,12 +95,6 @@ Future<void> _editName(BuildContext context, AppState s) async {
   final c = TextEditingController(text: s.user?.name);
   final ok = await showDialog<bool>(context: context, builder: (_) => AlertDialog(title: const Text('Your name'), content: TextField(controller: c), actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Save'))]));
   if (ok == true && c.text.trim().isNotEmpty) s.updateProfile(name: c.text.trim());
-}
-
-Future<void> _server(BuildContext context, AppState s) async {
-  final c = TextEditingController(text: s.serverUrl);
-  final ok = await showDialog<bool>(context: context, builder: (_) => AlertDialog(title: const Text('Server address'), content: TextField(controller: c, keyboardType: TextInputType.url), actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Save'))]));
-  if (ok == true) await s.setServerUrl(c.text);
 }
 
 Future<void> _deleteAccount(BuildContext context, AppState s) async {

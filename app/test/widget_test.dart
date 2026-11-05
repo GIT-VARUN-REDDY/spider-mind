@@ -56,11 +56,10 @@ void main() {
       await tester.pumpWidget(createTestApp(state: state, child: const AuthScreen()));
       await tester.pump();
 
-      expect(find.text('Project Spider'), findsOneWidget);
-      expect(find.text('Your tasks, ideas and goals as one living web.'), findsOneWidget);
+      expect(find.text('SPIDERMIND'), findsOneWidget);
+      expect(find.text('Plan it. Track it. Own your day.'), findsOneWidget);
       expect(find.text('Sign in'), findsOneWidget);
       expect(find.text('New here? Create an account'), findsOneWidget);
-      expect(find.text('Server settings'), findsOneWidget);
     });
 
     testWidgets('switches to register form and back', (tester) async {
