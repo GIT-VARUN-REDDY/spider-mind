@@ -165,5 +165,27 @@ void main() {
       cam.fling(-1000, 0, touchPos: const Offset(200, 600));
       expect(cam.yawVelocity, lessThan(0));
     });
+
+    test('two-finger rotation rotates web in natural direction', () {
+      final cam = WebCamera(width: 400, height: 800, distance: 30);
+      cam.fit(15, animate: false);
+
+      final rightNodeBefore = cam.project(10, 0, 0);
+
+      // Two-finger clockwise twist (deltaRad > 0)
+      cam.isDragging = true;
+      cam.twoFingerRotate(0.1);
+      cam.isDragging = false;
+      cam.snapNow();
+
+      final rightNodeAfter = cam.project(10, 0, 0);
+
+      // Right node moves DOWN in screen space when turning clockwise
+      expect(
+        rightNodeAfter.y,
+        greaterThan(rightNodeBefore.y),
+        reason: 'Clockwise two-finger twist must move right node down',
+      );
+    });
   });
 }

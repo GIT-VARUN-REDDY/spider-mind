@@ -150,9 +150,9 @@ class WebCamera {
     }
   }
 
-  /// Two-finger rotation.
+  /// Two-finger rotation with natural direction (clockwise twist rotates web clockwise).
   void twoFingerRotate(double deltaRad) {
-    tYaw += deltaRad;
+    tYaw -= deltaRad;
     if (isDragging) {
       yaw = tYaw;
     }
