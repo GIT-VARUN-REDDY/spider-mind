@@ -113,34 +113,31 @@ class WebCamera {
   }
 
   /// Orbit rotation with natural direction.
-  /// When [touchPos] is provided, uses circular turntable physics so dragging along the rim
-  /// (e.g. up-to-down on right side, right-to-left on upper rim) rotates the web in the direction of the finger.
+  /// When [touchPos] is provided, rotates based on the visual center of the web:
+  /// - Right of center (rx > 0): slide down -> rotates clockwise (right side moves down with finger).
+  /// - Left of center (rx < 0): slide down -> rotates counter-clockwise (left side moves down with finger).
+  /// - Above center (ry < 0): slide left -> rotates counter-clockwise (top moves left with finger).
+  /// - Down / below center (ry > 0): slide left -> rotates clockwise (bottom moves left with finger).
+  /// Works consistently across all zoom levels and pans.
   void orbit(double dxPx, double dyPx, {Offset? touchPos}) {
-    double dYaw = -dxPx * 0.0075;
-    double dPitch = -dyPx * 0.0055;
+    double dYaw;
+    double dPitch;
 
-    if (touchPos != null && width > 0 && height > 0) {
-      final cx = width / 2.0;
-      final cy = height / 2.0;
-      final rx = touchPos.dx - cx;
-      final ry = touchPos.dy - cy;
-      final rRef = math.max(math.min(width, height) * 0.42, 60.0);
-      final dist = math.sqrt(rx * rx + ry * ry);
+    if (touchPos != null) {
+      final center = project(0, 0, 0);
+      final rx = touchPos.dx - center.x;
+      final ry = touchPos.dy - center.y;
+      final r = math.sqrt(rx * rx + ry * ry);
+      final rEff = math.max(r, 40.0);
 
-      // Tangential turntable torque:
-      // - Right side (rx > 0): dragging down (dyPx > 0) decreases yaw -> right rim moves DOWN with finger.
-      // - Left side (rx < 0): dragging down (dyPx > 0) increases yaw -> left rim moves DOWN with finger.
-      // - Top rim (ry < 0): dragging left (dxPx < 0) increases yaw -> upper web moves LEFT with finger.
-      final tangentialYaw = (dxPx * (ry / rRef) - dyPx * (rx / rRef)) * 0.0075;
+      // Direct angular rotation around the visual web center (invariant to zoom)
+      dYaw = -(rx * dyPx - ry * dxPx) / (rEff * rEff);
 
-      // When dragging on the sides / perimeter, tangential rotation dominates
-      // and pitch tilt is suppressed so rim sliding rotates cleanly.
-      final sideWeight = (dist / rRef - 0.25).clamp(0.0, 0.75) / 0.75;
-      dYaw = (1.0 - sideWeight) * dYaw + sideWeight * tangentialYaw;
-
-      // Pitch tilting is strongest near the center of the web.
-      final centerFactor = (1.0 - (rx.abs() / rRef)).clamp(0.0, 1.0);
-      dPitch *= centerFactor;
+      final centerFactor = (1.0 - (rx.abs() / math.max(width * 0.45, 80.0))).clamp(0.0, 1.0);
+      dPitch = -dyPx * 0.0055 * centerFactor;
+    } else {
+      dYaw = -dxPx * 0.0075;
+      dPitch = -dyPx * 0.0055;
     }
 
     tYaw += dYaw;
@@ -162,23 +159,22 @@ class WebCamera {
 
   /// Fling momentum on touch release for buttery smooth inertial coasting.
   void fling(double vxPx, double vyPx, {Offset? touchPos}) {
-    double vYaw = -vxPx * 0.0075;
-    double vPitch = -vyPx * 0.0055;
+    double vYaw;
+    double vPitch;
 
-    if (touchPos != null && width > 0 && height > 0) {
-      final cx = width / 2.0;
-      final cy = height / 2.0;
-      final rx = touchPos.dx - cx;
-      final ry = touchPos.dy - cy;
-      final rRef = math.max(math.min(width, height) * 0.42, 60.0);
-      final dist = math.sqrt(rx * rx + ry * ry);
+    if (touchPos != null) {
+      final center = project(0, 0, 0);
+      final rx = touchPos.dx - center.x;
+      final ry = touchPos.dy - center.y;
+      final r = math.sqrt(rx * rx + ry * ry);
+      final rEff = math.max(r, 40.0);
 
-      final tangentialYaw = (vxPx * (ry / rRef) - vyPx * (rx / rRef)) * 0.0075;
-      final sideWeight = (dist / rRef - 0.25).clamp(0.0, 0.75) / 0.75;
-      vYaw = (1.0 - sideWeight) * vYaw + sideWeight * tangentialYaw;
-
-      final centerFactor = (1.0 - (rx.abs() / rRef)).clamp(0.0, 1.0);
-      vPitch *= centerFactor;
+      vYaw = -(rx * vyPx - ry * vxPx) / (rEff * rEff);
+      final centerFactor = (1.0 - (rx.abs() / math.max(width * 0.45, 80.0))).clamp(0.0, 1.0);
+      vPitch = -vyPx * 0.0055 * centerFactor;
+    } else {
+      vYaw = -vxPx * 0.0075;
+      vPitch = -vyPx * 0.0055;
     }
 
     yawVelocity = vYaw.clamp(-16.0, 16.0);

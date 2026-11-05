@@ -2,159 +2,168 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:spider_mind/features/web3d/web_camera.dart';
 
 void main() {
-  group('WebCamera Touch-Direction Orbit and Fling Tests', () {
-    test('sliding from UP to DOWN on the RIGHT side rotates web clockwise so right rim moves DOWN with finger', () {
+  group('WebCamera Center-Relative Orbit and Fling Tests', () {
+    test('RIGHT of center: slide down moves right side down with finger', () {
       final cam = WebCamera(width: 400, height: 800, distance: 30);
       cam.fit(15, animate: false);
 
-      // Node on the right side of the web in world space (x=10, y=0, z=0)
       final initialRightPoint = cam.project(10, 0, 0);
-      expect(initialRightPoint.x, greaterThan(200.0)); // to the right of center
+      expect(initialRightPoint.x, greaterThan(200.0));
 
-      // User touches the right side of the screen and drags DOWN (dy > 0)
+      // Touch right of center, slide DOWN (dy > 0)
       cam.isDragging = true;
       cam.orbit(0, 30, touchPos: const Offset(350, 400));
       cam.isDragging = false;
       cam.snapNow();
 
       final updatedRightPoint = cam.project(10, 0, 0);
-
-      // The right rim point on screen MUST move DOWN (y increases in screen coordinates)
-      expect(
-        updatedRightPoint.y,
-        greaterThan(initialRightPoint.y),
-        reason: 'Right rim must move down when sliding down on right side, not oppositely',
-      );
+      expect(updatedRightPoint.y, greaterThan(initialRightPoint.y));
     });
 
-    test('sliding from DOWN to UP on the RIGHT side rotates web counter-clockwise so right rim moves UP with finger', () {
+    test('RIGHT of center: slide up moves right side up with finger', () {
       final cam = WebCamera(width: 400, height: 800, distance: 30);
       cam.fit(15, animate: false);
 
       final initialRightPoint = cam.project(10, 0, 0);
 
-      // User touches the right side of the screen and drags UP (dy < 0)
+      // Touch right of center, slide UP (dy < 0)
       cam.isDragging = true;
       cam.orbit(0, -30, touchPos: const Offset(350, 400));
       cam.isDragging = false;
       cam.snapNow();
 
       final updatedRightPoint = cam.project(10, 0, 0);
-
-      // The right rim point on screen MUST move UP (y decreases in screen coordinates)
-      expect(
-        updatedRightPoint.y,
-        lessThan(initialRightPoint.y),
-        reason: 'Right rim must move up when sliding up on right side',
-      );
+      expect(updatedRightPoint.y, lessThan(initialRightPoint.y));
     });
 
-    test('sliding from RIGHT to LEFT in UPPER RIGHT moves upper right nodes to the LEFT with finger', () {
-      final cam = WebCamera(width: 400, height: 800, distance: 30);
-      cam.fit(15, animate: false);
-
-      // Node in upper right of the web (x=7, y=7, z=0)
-      final initialUpperRightPoint = cam.project(7, 7, 0);
-
-      // User touches upper right of the screen and slides to the LEFT (dx < 0)
-      cam.isDragging = true;
-      cam.orbit(-30, 0, touchPos: const Offset(320, 250));
-      cam.isDragging = false;
-      cam.snapNow();
-
-      final updatedUpperRightPoint = cam.project(7, 7, 0);
-
-      // The upper right point on screen MUST move LEFT (x decreases in screen coordinates)
-      expect(
-        updatedUpperRightPoint.x,
-        lessThan(initialUpperRightPoint.x),
-        reason: 'Upper right nodes must move left when sliding right-to-left, not oppositely',
-      );
-    });
-
-    test('sliding from RIGHT to LEFT generally moves web nodes to the LEFT with finger', () {
-      final cam = WebCamera(width: 400, height: 800, distance: 30);
-      cam.fit(15, animate: false);
-
-      final initialTopPoint = cam.project(0, 8, 0);
-
-      // Slide right to left (dx < 0)
-      cam.isDragging = true;
-      cam.orbit(-30, 0, touchPos: const Offset(200, 400));
-      cam.isDragging = false;
-      cam.snapNow();
-
-      final updatedTopPoint = cam.project(0, 8, 0);
-      expect(
-        updatedTopPoint.x,
-        lessThan(initialTopPoint.x),
-        reason: 'Nodes must move left when sliding right-to-left',
-      );
-    });
-
-    test('sliding from LEFT to RIGHT generally moves web nodes to the RIGHT with finger', () {
-      final cam = WebCamera(width: 400, height: 800, distance: 30);
-      cam.fit(15, animate: false);
-
-      final initialTopPoint = cam.project(0, 8, 0);
-
-      // Slide left to right (dx > 0)
-      cam.isDragging = true;
-      cam.orbit(30, 0, touchPos: const Offset(200, 400));
-      cam.isDragging = false;
-      cam.snapNow();
-
-      final updatedTopPoint = cam.project(0, 8, 0);
-      expect(
-        updatedTopPoint.x,
-        greaterThan(initialTopPoint.x),
-        reason: 'Nodes must move right when sliding left-to-right',
-      );
-    });
-
-    test('sliding from UP to DOWN on the LEFT side moves left rim DOWN with finger', () {
+    test('LEFT of center: slide down moves left side down with finger', () {
       final cam = WebCamera(width: 400, height: 800, distance: 30);
       cam.fit(15, animate: false);
 
       final initialLeftPoint = cam.project(-10, 0, 0);
-      expect(initialLeftPoint.x, lessThan(200.0)); // to the left of center
+      expect(initialLeftPoint.x, lessThan(200.0));
 
-      // User touches the left side of the screen and drags DOWN (dy > 0)
+      // Touch left of center, slide DOWN (dy > 0)
       cam.isDragging = true;
       cam.orbit(0, 30, touchPos: const Offset(50, 400));
       cam.isDragging = false;
       cam.snapNow();
 
       final updatedLeftPoint = cam.project(-10, 0, 0);
-
-      // The left rim point on screen MUST move DOWN (y increases in screen coordinates)
-      expect(
-        updatedLeftPoint.y,
-        greaterThan(initialLeftPoint.y),
-        reason: 'Left rim must move down when sliding down on left side',
-      );
+      expect(updatedLeftPoint.y, greaterThan(initialLeftPoint.y));
     });
 
-    test('fling on the right side coasts smoothly with clockwise angular velocity', () {
+    test('LEFT of center: slide up moves left side up with finger', () {
       final cam = WebCamera(width: 400, height: 800, distance: 30);
       cam.fit(15, animate: false);
 
-      // Fling down on the right side
+      final initialLeftPoint = cam.project(-10, 0, 0);
+
+      // Touch left of center, slide UP (dy < 0)
+      cam.isDragging = true;
+      cam.orbit(0, -30, touchPos: const Offset(50, 400));
+      cam.isDragging = false;
+      cam.snapNow();
+
+      final updatedLeftPoint = cam.project(-10, 0, 0);
+      expect(updatedLeftPoint.y, lessThan(initialLeftPoint.y));
+    });
+
+    test('ABOVE center: slide left moves top part to the left with finger', () {
+      final cam = WebCamera(width: 400, height: 800, distance: 30);
+      cam.fit(15, animate: false);
+
+      final initialTopPoint = cam.project(0, 8, 0);
+
+      // Touch above center, slide LEFT (dx < 0)
+      cam.isDragging = true;
+      cam.orbit(-30, 0, touchPos: const Offset(200, 200));
+      cam.isDragging = false;
+      cam.snapNow();
+
+      final updatedTopPoint = cam.project(0, 8, 0);
+      expect(updatedTopPoint.x, lessThan(initialTopPoint.x));
+    });
+
+    test('DOWN / BELOW center: slide left moves bottom part to the left with finger', () {
+      final cam = WebCamera(width: 400, height: 800, distance: 30);
+      cam.fit(15, animate: false);
+
+      final initialBottomPoint = cam.project(0, -8, 0);
+
+      // Touch below center, slide LEFT (dx < 0)
+      cam.isDragging = true;
+      cam.orbit(-30, 0, touchPos: const Offset(200, 600));
+      cam.isDragging = false;
+      cam.snapNow();
+
+      final updatedBottomPoint = cam.project(0, -8, 0);
+      expect(updatedBottomPoint.x, lessThan(initialBottomPoint.x));
+    });
+
+    test('DOWN / BELOW center: slide right moves bottom part to the right with finger', () {
+      final cam = WebCamera(width: 400, height: 800, distance: 30);
+      cam.fit(15, animate: false);
+
+      final initialBottomPoint = cam.project(0, -8, 0);
+
+      // Touch below center, slide RIGHT (dx > 0)
+      cam.isDragging = true;
+      cam.orbit(30, 0, touchPos: const Offset(200, 600));
+      cam.isDragging = false;
+      cam.snapNow();
+
+      final updatedBottomPoint = cam.project(0, -8, 0);
+      expect(updatedBottomPoint.x, greaterThan(initialBottomPoint.x));
+    });
+
+    test('All directions maintain identical sliding directions even after zooms', () {
+      for (final zoomFactor in [0.5, 1.0, 2.5]) {
+        final cam = WebCamera(width: 400, height: 800, distance: 30);
+        cam.fit(15, animate: false);
+        cam.zoomBy(zoomFactor);
+        cam.snapNow();
+
+        final center = cam.project(0, 0, 0);
+
+        // Right side slide down
+        final rightNodeBefore = cam.project(6, 0, 0);
+        cam.orbit(0, 25, touchPos: Offset(center.x + 100, center.y));
+        cam.snapNow();
+        final rightNodeAfter = cam.project(6, 0, 0);
+        expect(rightNodeAfter.y, greaterThan(rightNodeBefore.y), reason: 'Zoom $zoomFactor right slide down');
+
+        // Above center slide left
+        final topNodeBefore = cam.project(0, 6, 0);
+        cam.orbit(-25, 0, touchPos: Offset(center.x, center.y - 100));
+        cam.snapNow();
+        final topNodeAfter = cam.project(0, 6, 0);
+        expect(topNodeAfter.x, lessThan(topNodeBefore.x), reason: 'Zoom $zoomFactor top slide left');
+
+        // Below center slide left
+        final bottomNodeBefore = cam.project(0, -6, 0);
+        cam.orbit(-25, 0, touchPos: Offset(center.x, center.y + 100));
+        cam.snapNow();
+        final bottomNodeAfter = cam.project(0, -6, 0);
+        expect(bottomNodeAfter.x, lessThan(bottomNodeBefore.x), reason: 'Zoom $zoomFactor bottom slide left');
+      }
+    });
+
+    test('fling coasts smoothly in matching direction', () {
+      final cam = WebCamera(width: 400, height: 800, distance: 30);
+      cam.fit(15, animate: false);
+
+      // Fling down on right of center
       cam.fling(0, 1000, touchPos: const Offset(350, 400));
-
-      // Clockwise rotation means negative yawVelocity so right side moves down
       expect(cam.yawVelocity, lessThan(0));
-    });
 
-    test('fling on upper right from right to left coasts with counter-clockwise angular velocity', () {
-      final cam = WebCamera(width: 400, height: 800, distance: 30);
-      cam.fit(15, animate: false);
-
-      // Fling left on the upper right side
-      cam.fling(-1000, 0, touchPos: const Offset(320, 250));
-
-      // Counter-clockwise rotation means positive yawVelocity so upper nodes continue moving left
+      // Fling left above center
+      cam.fling(-1000, 0, touchPos: const Offset(200, 200));
       expect(cam.yawVelocity, greaterThan(0));
+
+      // Fling left below center
+      cam.fling(-1000, 0, touchPos: const Offset(200, 600));
+      expect(cam.yawVelocity, lessThan(0));
     });
   });
 }
