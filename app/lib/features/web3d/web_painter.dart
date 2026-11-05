@@ -183,50 +183,85 @@ class WebPainter extends CustomPainter {
       );
     }
 
-    // Ring labels: prioritized, collision-free placement along the ring arc.
-    final sortedRings = List<WebRing>.of(layout.rings)
-      ..sort((a, b) => _ringPriority(b.band).compareTo(_ringPriority(a.band)));
-
-    final la = layout.ringLabelAngle;
+    // Ring labels: side-by-side across different orbits without coincidence.
+    final nRings = layout.rings.length;
     final sCount = math.max(1, layout.spokes.length);
     final spokeGap = 2 * math.pi / sCount;
-    final maxDev = spokeGap * 0.40;
-    const ringAngleDeltas = <double>[
-      0.0,
-      0.12,
-      -0.12,
-      0.24,
-      -0.24,
-      0.36,
-      -0.36,
-      0.50,
-      -0.50,
-      0.65,
-      -0.65,
-    ];
+    final la = layout.ringLabelAngle;
+    final span = math.min(spokeGap * 0.70, 1.25);
+    const nudges = <double>[0.0, 0.06, -0.06, 0.12, -0.12, 0.18, -0.18, 0.25, -0.25, 0.35, -0.35];
 
-    for (final ring in sortedRings) {
+    for (var i = 0; i < nRings; i++) {
+      final ring = layout.rings[i];
       final r = ring.radius - 0.7;
       final isNow = ring.band == UrgencyBand.now;
       final tp = _text(
         ring.band.label,
         10,
-        (isNow ? kCrimson : ink).withValues(alpha: isNow ? 0.70 : 0.45),
-        spacing: 1.4,
+        (isNow ? kCrimson : ink).withValues(alpha: isNow ? 0.90 : 0.65),
+        spacing: 1.3,
+        w: isNow ? FontWeight.w700 : FontWeight.w500,
       );
 
-      for (final delta in ringAngleDeltas) {
-        if (delta.abs() > maxDev && delta != 0.0) continue;
-        final candAngle = la + delta;
-        final lp = _p(WebLayout.worldX(r, candAngle), WebLayout.worldY(r, candAngle), 0);
-        final rect = Rect.fromCenter(center: lp, width: tp.width + 12, height: tp.height + 6);
-        final inBounds = rect.right > 0 && rect.left < size.width && rect.bottom > 0 && rect.top < size.height;
-        if (inBounds && !_rectOverlapsAny(rect, placedLabelRects, pad: 4.0)) {
-          tp.paint(canvas, lp - Offset(tp.width / 2, tp.height / 2));
-          placedLabelRects.add(rect);
-          break; // successfully placed this ring's label without collision
+      // Stagger each orbit side by side across the angular span.
+      final baseDelta = nRings > 1 ? -span / 2 + span * (i / (nRings - 1)) : 0.0;
+      final nominalAngle = la + baseDelta;
+
+      Offset chosenPos = _p(WebLayout.worldX(r, nominalAngle), WebLayout.worldY(r, nominalAngle), 0);
+      Rect chosenRect = Rect.fromCenter(center: chosenPos, width: tp.width + 10, height: tp.height + 6);
+      var placed = false;
+
+      for (final nudge in nudges) {
+        final candAngle = nominalAngle + nudge;
+        final rawPos = _p(WebLayout.worldX(r, candAngle), WebLayout.worldY(r, candAngle), 0);
+        final safeX = rawPos.dx.clamp(tp.width / 2 + 6, size.width - tp.width / 2 - 6);
+        final safeY = rawPos.dy.clamp(tp.height / 2 + 6, size.height - tp.height / 2 - 6);
+        final candPos = Offset(safeX, safeY);
+        final candRect = Rect.fromCenter(center: candPos, width: tp.width + 10, height: tp.height + 6);
+
+        if (!_rectOverlapsAny(candRect, placedLabelRects, pad: 2.0)) {
+          chosenPos = candPos;
+          chosenRect = candRect;
+          placed = true;
+          break;
         }
       }
+
+      if (!placed) {
+        // Fallback: pick candidate with minimum overlap so no label is ever invisible.
+        double minOverlap = double.infinity;
+        for (final nudge in nudges) {
+          final candAngle = nominalAngle + nudge;
+          final rawPos = _p(WebLayout.worldX(r, candAngle), WebLayout.worldY(r, candAngle), 0);
+          final safeX = rawPos.dx.clamp(tp.width / 2 + 6, size.width - tp.width / 2 - 6);
+          final safeY = rawPos.dy.clamp(tp.height / 2 + 6, size.height - tp.height / 2 - 6);
+          final candPos = Offset(safeX, safeY);
+          final candRect = Rect.fromCenter(center: candPos, width: tp.width + 10, height: tp.height + 6);
+
+          double overlap = 0;
+          for (final o in placedLabelRects) {
+            final inter = candRect.intersect(o);
+            if (inter.width > 0 && inter.height > 0) {
+              overlap += inter.width * inter.height;
+            }
+          }
+          if (overlap < minOverlap) {
+            minOverlap = overlap;
+            chosenPos = candPos;
+            chosenRect = candRect;
+          }
+        }
+      }
+
+      // Draw subtle backing pill for readability over orbit lines.
+      final pillRect = Rect.fromCenter(center: chosenPos, width: tp.width + 8, height: tp.height + 4);
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(pillRect, const Radius.circular(5)),
+        Paint()..color = (dark ? const Color(0xFF060913) : Colors.white).withValues(alpha: 0.72),
+      );
+
+      tp.paint(canvas, chosenPos - Offset(tp.width / 2, tp.height / 2));
+      placedLabelRects.add(chosenRect);
     }
 
     // Edges.
@@ -436,26 +471,6 @@ class WebPainter extends CustomPainter {
   bool shouldRepaint(covariant WebPainter old) => true;
 }
 
-int _ringPriority(UrgencyBand band) {
-  switch (band) {
-    case UrgencyBand.now:
-      return 100;
-    case UrgencyBand.later:
-      return 80;
-    case UrgencyBand.month:
-      return 70;
-    case UrgencyBand.week:
-      return 60;
-    case UrgencyBand.tomorrow:
-      return 50;
-    case UrgencyBand.nextMonth:
-      return 40;
-    case UrgencyBand.year:
-      return 30;
-    case UrgencyBand.done:
-      return 20;
-  }
-}
 
 bool _rectOverlapsAny(Rect r, List<Rect> others, {double pad = 4.0}) {
   final padded = r.inflate(pad);
