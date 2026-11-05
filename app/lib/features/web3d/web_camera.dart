@@ -78,12 +78,17 @@ class WebCamera {
   double get zoomLevel => fitDistance / distance;
 
   ProjectedPoint project(double x, double y, double z) {
-    final dx = x - panX;
-    final dy = y - panY;
+    // Rotate world coordinates around web origin (0, 0, 0) first:
+    // This guarantees the web center (0, 0, 0) is perfectly pinned during single-finger rotation.
     final cy = math.cos(yaw);
     final sy = math.sin(yaw);
-    final x1 = dx * cy - dy * sy;
-    final y1 = dx * sy + dy * cy;
+    final xr = x * cy - y * sy;
+    final yr = x * sy + y * cy;
+
+    // Translate by camera pan in view space:
+    final x1 = xr - panX;
+    final y1 = yr - panY;
+
     final cp = math.cos(pitch);
     final sp = math.sin(pitch);
     final up = y1 * cp + z * sp;
@@ -119,9 +124,10 @@ class WebCamera {
   /// - Above center (ry < 0): slide left -> rotates counter-clockwise (top moves left with finger).
   /// - Down / below center (ry > 0): slide left -> rotates clockwise (bottom moves left with finger).
   /// Works consistently across all zoom levels and pans.
+  /// Single-finger orbit rotation around the web center point.
+  /// The center point (0, 0, 0) never moves or changes position with single-finger gesture.
   void orbit(double dxPx, double dyPx, {Offset? touchPos}) {
     double dYaw;
-    double dPitch;
 
     if (touchPos != null) {
       final center = project(0, 0, 0);
@@ -132,20 +138,15 @@ class WebCamera {
 
       // Direct angular rotation around the visual web center (invariant to zoom)
       dYaw = -(rx * dyPx - ry * dxPx) / (rEff * rEff);
-
-      final centerFactor = (1.0 - (rx.abs() / math.max(width * 0.45, 80.0))).clamp(0.0, 1.0);
-      dPitch = -dyPx * 0.0055 * centerFactor;
     } else {
       dYaw = -dxPx * 0.0075;
-      dPitch = -dyPx * 0.0055;
     }
 
     tYaw += dYaw;
-    tPitch = (tPitch + dPitch).clamp(minPitch, maxPitch).toDouble();
+    pitchVelocity = 0;
     if (isDragging) {
       // Instant reaction during touch drag - zero input latency
       yaw = tYaw;
-      pitch = tPitch;
     }
   }
 
@@ -160,7 +161,6 @@ class WebCamera {
   /// Fling momentum on touch release for buttery smooth inertial coasting.
   void fling(double vxPx, double vyPx, {Offset? touchPos}) {
     double vYaw;
-    double vPitch;
 
     if (touchPos != null) {
       final center = project(0, 0, 0);
@@ -170,15 +170,12 @@ class WebCamera {
       final rEff = math.max(r, 40.0);
 
       vYaw = -(rx * vyPx - ry * vxPx) / (rEff * rEff);
-      final centerFactor = (1.0 - (rx.abs() / math.max(width * 0.45, 80.0))).clamp(0.0, 1.0);
-      vPitch = -vyPx * 0.0055 * centerFactor;
     } else {
       vYaw = -vxPx * 0.0075;
-      vPitch = -vyPx * 0.0055;
     }
 
     yawVelocity = vYaw.clamp(-16.0, 16.0);
-    pitchVelocity = vPitch.clamp(-6.0, 6.0);
+    pitchVelocity = 0;
   }
 
   void zoomBy(double factor) {
@@ -189,15 +186,13 @@ class WebCamera {
     }
   }
 
-  /// Drag the content by a screen delta (the point under the finger follows it).
+  /// Drag the content by a screen delta (the point under two fingers follows it).
   void panBy(double dxPx, double dyPx) {
     final s = focal / math.max(distance, 0.5);
     final vx = -dxPx / s;
     final vy = dyPx / (s * math.max(math.cos(pitch), 0.2));
-    final cy = math.cos(yaw);
-    final sy = math.sin(yaw);
-    tPanX += vx * cy + vy * sy;
-    tPanY += -vx * sy + vy * cy;
+    tPanX += vx;
+    tPanY += vy;
     if (isDragging) {
       panX = tPanX;
       panY = tPanY;

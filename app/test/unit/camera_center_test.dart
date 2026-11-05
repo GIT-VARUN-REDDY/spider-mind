@@ -66,5 +66,30 @@ void main() {
       expect(pReset.x, closeTo(200.0, 1e-4));
       expect(pReset.y, closeTo(400.0, 1e-4));
     });
+
+    test('single finger orbit never changes the center point even after two-finger pan', () {
+      final cam = WebCamera(width: 400, height: 800, distance: 30);
+      cam.fit(15, animate: false);
+
+      // Pan with 2 fingers
+      cam.isDragging = true;
+      cam.panBy(100, 50);
+      cam.isDragging = false;
+      cam.snapNow();
+
+      final pCenterBefore = cam.project(0, 0, 0);
+
+      // Single finger orbit in various directions
+      for (final delta in [const Offset(40, 20), const Offset(-50, 30), const Offset(0, -60)]) {
+        cam.isDragging = true;
+        cam.orbit(delta.dx, delta.dy, touchPos: const Offset(320, 350));
+        cam.isDragging = false;
+        cam.snapNow();
+
+        final pCenterAfter = cam.project(0, 0, 0);
+        expect(pCenterAfter.x, closeTo(pCenterBefore.x, 1e-4), reason: 'Center X shifted during single-finger orbit');
+        expect(pCenterAfter.y, closeTo(pCenterBefore.y, 1e-4), reason: 'Center Y shifted during single-finger orbit');
+      }
+    });
   });
 }
