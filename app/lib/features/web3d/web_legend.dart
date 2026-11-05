@@ -45,7 +45,7 @@ class _Legend extends StatelessWidget {
             Text('How to read your web', style: t.titleLarge),
             head('Where a thread sits'),
             row(const Icon(Icons.donut_large, color: kBlue), 'Spoke = space', 'Each space is an arm of the web, in its own colour.'),
-            row(const Icon(Icons.radar, color: kCrimson), 'Ring = urgency', 'Centre is NOW, then this week, this month, next month, this year, later. Done is outermost.'),
+            row(const Icon(Icons.radar, color: kCrimson), 'Ring = urgency', 'Centre is NOW, then tomorrow, this week, this month, next month, this year, later. Done is outermost.'),
             row(const Icon(Icons.layers, color: kBlue), 'Depth = priority', 'High priority sits nearer to you, low is further away.'),
             head('Shape = type'),
             row(shape(Icons.circle_outlined), 'Task', 'Something to do.'),

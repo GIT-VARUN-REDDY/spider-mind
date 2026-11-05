@@ -264,6 +264,7 @@ class WebLayout {
     // Bucket threads into cells (spoke, band).
     final bandList = <UrgencyBand>[
       UrgencyBand.now,
+      UrgencyBand.tomorrow,
       UrgencyBand.week,
       UrgencyBand.month,
       UrgencyBand.nextMonth,

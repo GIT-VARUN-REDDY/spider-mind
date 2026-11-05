@@ -6,6 +6,7 @@ void main() {
   group('UrgencyBand Calendar Tests', () {
     test('Labels are correct', () {
       expect(UrgencyBand.now.label, 'NOW');
+      expect(UrgencyBand.tomorrow.label, 'TOMORROW');
       expect(UrgencyBand.week.label, 'THIS WEEK');
       expect(UrgencyBand.month.label, 'THIS MONTH');
       expect(UrgencyBand.nextMonth.label, 'NEXT MONTH');
@@ -40,8 +41,11 @@ void main() {
       // No due date -> later ring
       expect(bandOf(makeThread(null), now), UrgencyBand.later);
 
-      // Due in 12 hours -> now
+      // Due in 12 hours (same calendar day or <24h) -> now
       expect(bandOf(makeThread(now.add(const Duration(hours: 12))), now), UrgencyBand.now);
+
+      // Due tomorrow (March 11) -> tomorrow
+      expect(bandOf(makeThread(DateTime.utc(2026, 3, 11, 15, 0)), now), UrgencyBand.tomorrow);
 
       // Due in 4 days (March 14) -> this week
       expect(bandOf(makeThread(now.add(const Duration(days: 4))), now), UrgencyBand.week);
@@ -57,6 +61,32 @@ void main() {
 
       // Due next year (January 10, 2027) -> later
       expect(bandOf(makeThread(DateTime.utc(2027, 1, 10)), now), UrgencyBand.later);
+    });
+
+    test('Shifts thread from tomorrow to now as day advances', () {
+      final taskDueNov5 = Thread(
+        id: 'shift-task',
+        title: 'Task due Nov 5',
+        spaceId: 's1',
+        type: ThreadType.task,
+        priority: Priority.medium,
+        status: ThreadStatus.todo,
+        dueAt: DateTime.utc(2026, 11, 5, 17, 0),
+        createdAt: DateTime.utc(2026, 11, 1),
+        updatedAt: DateTime.utc(2026, 11, 1),
+      );
+
+      // Yesterday: Nov 4 -> The task is scheduled for TOMORROW
+      final yesterday = DateTime.utc(2026, 11, 4, 14, 0);
+      expect(bandOf(taskDueNov5, yesterday), UrgencyBand.tomorrow);
+
+      // Today: Nov 5 -> The task is now scheduled for TODAY / NOW
+      final today = DateTime.utc(2026, 11, 5, 9, 0);
+      expect(bandOf(taskDueNov5, today), UrgencyBand.now);
+
+      // Tomorrow: Nov 6 -> The task is now overdue -> still stays in NOW
+      final tomorrow = DateTime.utc(2026, 11, 6, 9, 0);
+      expect(bandOf(taskDueNov5, tomorrow), UrgencyBand.now);
     });
 
     test('December boundary transitions to next year correctly for nextMonth', () {

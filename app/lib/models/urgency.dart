@@ -1,13 +1,15 @@
 import 'thread.dart';
 
 /// Which ring of the web a thread sits on. Inner ring = most urgent.
-enum UrgencyBand { now, week, month, nextMonth, year, later, done }
+enum UrgencyBand { now, tomorrow, week, month, nextMonth, year, later, done }
 
 extension UrgencyBandLabel on UrgencyBand {
   String get label {
     switch (this) {
       case UrgencyBand.now:
         return 'NOW';
+      case UrgencyBand.tomorrow:
+        return 'TOMORROW';
       case UrgencyBand.week:
         return 'THIS WEEK';
       case UrgencyBand.month:
@@ -32,7 +34,8 @@ bool isOverdue(Thread t, DateTime now) =>
 /// Rules:
 /// - done -> done ring
 /// - doing -> now ring
-/// - overdue or due within 24h -> now
+/// - overdue, due today (dayDiff <= 0), or due within 24h -> now ring
+/// - due tomorrow (dayDiff == 1) -> tomorrow ring (shifts to now when today arrives)
 /// - due within 7 days -> this week
 /// - due in current calendar month -> this month
 /// - due in next calendar month -> next month
@@ -47,12 +50,24 @@ UrgencyBand bandOf(Thread t, DateTime now) {
   final nowLocal = now.toLocal();
   final dueLocal = due.toLocal();
 
-  // If due is in the past (overdue) or within 24 hours -> NOW
-  final diffHours = due.difference(now.toUtc()).inHours;
-  if (diffHours <= 24) return UrgencyBand.now;
+  final today = DateTime(nowLocal.year, nowLocal.month, nowLocal.day);
+  final dueDate = DateTime(dueLocal.year, dueLocal.month, dueLocal.day);
+  final dayDiff = dueDate.difference(today).inDays;
+
+  // If due is in the past (overdue), due today (dayDiff <= 0), or within 24 hours -> NOW
+  if (dayDiff <= 0 || due.difference(now.toUtc()).inHours <= 24) {
+    return UrgencyBand.now;
+  }
+
+  // Due tomorrow (calendar dayDiff == 1) -> TOMORROW (shifts into NOW when date rolls over)
+  if (dayDiff == 1) {
+    return UrgencyBand.tomorrow;
+  }
 
   // Due within 7 days -> THIS WEEK
-  if (diffHours <= 24 * 7) return UrgencyBand.week;
+  if (dayDiff <= 7) {
+    return UrgencyBand.week;
+  }
 
   // Same calendar month and year -> THIS MONTH
   if (dueLocal.year == nowLocal.year && dueLocal.month == nowLocal.month) {

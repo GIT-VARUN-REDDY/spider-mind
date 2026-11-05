@@ -530,13 +530,14 @@ class HomeShell extends StatefulWidget {
   State<HomeShell> createState() => _HomeShellState();
 }
 
-class _HomeShellState extends State<HomeShell> {
+class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   int _tab = 0;
   StreamSubscription<String>? _sub;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     final s = context.read<AppState>();
     _sub = s.notificationTaps.listen(_open);
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -556,8 +557,17 @@ class _HomeShellState extends State<HomeShell> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _sub?.cancel();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) {
+      // Re-evaluate calendar shifts immediately when user unlocks phone or returns next day
+      context.read<AppState>().refresh();
+    }
   }
 
   @override

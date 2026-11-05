@@ -27,7 +27,7 @@ class _ThreadsScreenState extends State<ThreadsScreen> {
   List<(String, List<Thread>)> _groups(List<Thread> all) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final g = <String, List<Thread>>{for (final k in ['Overdue', 'Today', 'This week', 'This month', 'Next month', 'This year', 'Later', 'No date', 'Done']) k: []};
+    final g = <String, List<Thread>>{for (final k in ['Overdue', 'Today', 'Tomorrow', 'This week', 'This month', 'Next month', 'This year', 'Later', 'No date', 'Done']) k: []};
     for (final t in all) {
       if (t.isDone) {
         g['Done']!.add(t);
@@ -42,8 +42,10 @@ class _ThreadsScreenState extends State<ThreadsScreen> {
         final days = DateTime(d.year, d.month, d.day).difference(today).inDays;
         final nextMonthYear = today.month == 12 ? today.year + 1 : today.year;
         final nextMonth = today.month == 12 ? 1 : today.month + 1;
-        if (days == 0) {
+        if (days <= 0) {
           g['Today']!.add(t);
+        } else if (days == 1) {
+          g['Tomorrow']!.add(t);
         } else if (days <= 7) {
           g['This week']!.add(t);
         } else if (d.year == today.year && d.month == today.month) {
