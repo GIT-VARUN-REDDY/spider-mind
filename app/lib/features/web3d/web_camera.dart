@@ -111,10 +111,10 @@ class WebCamera {
     if (!animate) _snap();
   }
 
-  /// Orbit rotation with natural direction (sliding left moves web left, sliding right moves web right).
+  /// Orbit rotation with natural direction (sliding left moves web left, sliding right moves web right, sliding up/down tilts naturally).
   void orbit(double dxPx, double dyPx) {
     final dYaw = dxPx * 0.0075;
-    final dPitch = dyPx * 0.0055;
+    final dPitch = -dyPx * 0.0055;
     tYaw += dYaw;
     tPitch = (tPitch + dPitch).clamp(minPitch, maxPitch).toDouble();
     if (isDragging) {
@@ -127,7 +127,7 @@ class WebCamera {
   /// Fling momentum on touch release for buttery smooth inertial coasting.
   void fling(double vxPx, double vyPx) {
     yawVelocity = (vxPx * 0.0075).clamp(-16.0, 16.0);
-    pitchVelocity = (vyPx * 0.0055).clamp(-6.0, 6.0);
+    pitchVelocity = (-vyPx * 0.0055).clamp(-6.0, 6.0);
   }
 
   void zoomBy(double factor) {
