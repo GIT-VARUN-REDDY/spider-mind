@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:ui' show Rect;
 
 /// A label the painter would like to draw, already measured in screen pixels.
 class LabelCandidate {
@@ -37,6 +38,7 @@ List<String> pickLabels(
   required double viewWidth,
   required double viewHeight,
   double pad = 4,
+  List<Rect> obstacles = const <Rect>[],
 }) {
   final sorted = List<LabelCandidate>.of(candidates)
     ..sort((a, b) => b.importance.compareTo(a.importance));
@@ -49,6 +51,14 @@ List<String> pickLabels(
       if (c.x < p.x + p.w + pad && c.x + c.w + pad > p.x && c.y < p.y + p.h + pad && c.y + c.h + pad > p.y) {
         clash = true;
         break;
+      }
+    }
+    if (!clash) {
+      for (final obs in obstacles) {
+        if (c.x < obs.right + pad && c.x + c.w + pad > obs.left && c.y < obs.bottom + pad && c.y + c.h + pad > obs.top) {
+          clash = true;
+          break;
+        }
       }
     }
     if (!clash) placed.add(c);

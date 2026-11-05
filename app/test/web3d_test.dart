@@ -1,3 +1,4 @@
+import 'dart:ui' show Rect;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:spider_mind/features/web3d/web_camera.dart';
 import 'package:spider_mind/features/web3d/web_layout.dart';
@@ -117,5 +118,11 @@ void main() {
       expect(ids, orderedEquals(['b', 'c']));
       expect(pickLabels([a, c], budget: 1, viewWidth: 400, viewHeight: 300), hasLength(1));
     });
+    test('pickLabels respects obstacles', () {
+      const b = LabelCandidate(id: 'b', x: 20, y: 12, w: 80, h: 14, importance: 5);
+      final ids = pickLabels([b], budget: 5, viewWidth: 400, viewHeight: 300, obstacles: const [Rect.fromLTWH(10, 10, 100, 20)]);
+      expect(ids, isEmpty);
+    });
   });
 }
+

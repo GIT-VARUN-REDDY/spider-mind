@@ -80,8 +80,90 @@ class WebPainter extends CustomPainter {
 
     if (layout.spokes.isEmpty) return;
     final zoom = camera.zoomLevel;
+    final placedLabelRects = <Rect>[];
 
-    // Rings (urgency bands) + labels.
+    // Spokes (spaces): lines and collision-free labels.
+    for (final s in layout.spokes) {
+      final a = s.angle;
+      final p0 = _p(WebLayout.worldX(1.5, a), WebLayout.worldY(1.5, a), 0);
+      final rEnd = layout.outerRadius + 0.5;
+      final p1 = _p(WebLayout.worldX(rEnd, a), WebLayout.worldY(rEnd, a), 0);
+      canvas.drawLine(p0, p1, Paint()..color = s.color.withValues(alpha: 0.28)..strokeWidth = 1.2);
+
+      final pl = _p(WebLayout.worldX(rEnd + 1.6, a), WebLayout.worldY(rEnd + 1.6, a), 0);
+      final tp = _text(s.name.toUpperCase(), 11, s.color, w: FontWeight.w800, spacing: 1.2);
+
+      // Determine screen direction of this spoke.
+      final pCenter = _p(0, 0, 0);
+      final dir = pl - pCenter;
+      final dist = dir.distance;
+      final unit = dist > 0.001 ? dir / dist : const Offset(1, 0);
+      final norm = Offset(-unit.dy, unit.dx);
+
+      // Candidate offsets to avoid overlap with other spoke labels.
+      final candidates = <Offset>[
+        pl,
+        pl + norm * (tp.height + 4),
+        pl - norm * (tp.height + 4),
+        pl + unit * 24,
+        pl + unit * 24 + norm * (tp.height + 4),
+        pl + unit * 24 - norm * (tp.height + 4),
+        pl + norm * (tp.height * 2 + 8),
+        pl - norm * (tp.height * 2 + 8),
+        pl + unit * 48,
+        pl + unit * 48 + norm * (tp.height + 4),
+        pl + unit * 48 - norm * (tp.height + 4),
+        pl + unit * 72,
+        pl + unit * 72 + norm * (tp.height + 4),
+        pl + unit * 72 - norm * (tp.height + 4),
+        pl + unit * 96,
+      ];
+
+      Offset chosenPos = pl;
+      Rect chosenRect = Rect.fromCenter(center: pl, width: tp.width + 10, height: tp.height + 6);
+      var placed = false;
+
+      for (final cand in candidates) {
+        final rect = Rect.fromCenter(center: cand, width: tp.width + 10, height: tp.height + 6);
+        final inBounds = rect.right > 0 && rect.left < size.width && rect.bottom > 0 && rect.top < size.height;
+        if (inBounds && !_rectOverlapsAny(rect, placedLabelRects, pad: 4.0)) {
+          chosenPos = cand;
+          chosenRect = rect;
+          placed = true;
+          break;
+        }
+      }
+
+      if (!placed) {
+        // Fallback: pick the candidate that has minimal overlap
+        double minOverlap = double.infinity;
+        for (final cand in candidates) {
+          final rect = Rect.fromCenter(center: cand, width: tp.width + 10, height: tp.height + 6);
+          double overlapArea = 0;
+          for (final o in placedLabelRects) {
+            final inter = rect.intersect(o);
+            if (inter.width > 0 && inter.height > 0) {
+              overlapArea += inter.width * inter.height;
+            }
+          }
+          if (overlapArea < minOverlap) {
+            minOverlap = overlapArea;
+            chosenPos = cand;
+            chosenRect = rect;
+          }
+        }
+      }
+
+      // If shifted away from the spoke tip, draw a subtle connector line.
+      if ((chosenPos - pl).distanceSquared > 16) {
+        canvas.drawLine(p1, chosenPos, Paint()..color = s.color.withValues(alpha: 0.22)..strokeWidth = 1.0);
+      }
+
+      tp.paint(canvas, chosenPos - Offset(tp.width / 2, tp.height / 2));
+      placedLabelRects.add(chosenRect);
+    }
+
+    // Rings (urgency bands): paths.
     for (final ring in layout.rings) {
       final r = ring.radius - 0.7;
       final path = Path();
@@ -99,22 +181,52 @@ class WebPainter extends CustomPainter {
           ..strokeWidth = isNow ? 1.4 : 1
           ..color = (isNow ? kCrimson : ink).withValues(alpha: isNow ? 0.35 : 0.10),
       );
-      final la = layout.ringLabelAngle;
-      final lp = _p(WebLayout.worldX(r, la), WebLayout.worldY(r, la), 0);
-      final tp = _text(ring.band.label, 10, ink.withValues(alpha: 0.45), spacing: 1.4);
-      tp.paint(canvas, lp - Offset(tp.width / 2, tp.height / 2));
     }
 
-    // Spokes (spaces).
-    for (final s in layout.spokes) {
-      final a = s.angle;
-      final p0 = _p(WebLayout.worldX(1.5, a), WebLayout.worldY(1.5, a), 0);
-      final rEnd = layout.outerRadius + 0.5;
-      final p1 = _p(WebLayout.worldX(rEnd, a), WebLayout.worldY(rEnd, a), 0);
-      canvas.drawLine(p0, p1, Paint()..color = s.color.withValues(alpha: 0.28)..strokeWidth = 1.2);
-      final pl = _p(WebLayout.worldX(rEnd + 1.6, a), WebLayout.worldY(rEnd + 1.6, a), 0);
-      final tp = _text(s.name.toUpperCase(), 11, s.color, w: FontWeight.w800, spacing: 1.2);
-      tp.paint(canvas, pl - Offset(tp.width / 2, tp.height / 2));
+    // Ring labels: prioritized, collision-free placement along the ring arc.
+    final sortedRings = List<WebRing>.of(layout.rings)
+      ..sort((a, b) => _ringPriority(b.band).compareTo(_ringPriority(a.band)));
+
+    final la = layout.ringLabelAngle;
+    final sCount = math.max(1, layout.spokes.length);
+    final spokeGap = 2 * math.pi / sCount;
+    final maxDev = spokeGap * 0.40;
+    const ringAngleDeltas = <double>[
+      0.0,
+      0.12,
+      -0.12,
+      0.24,
+      -0.24,
+      0.36,
+      -0.36,
+      0.50,
+      -0.50,
+      0.65,
+      -0.65,
+    ];
+
+    for (final ring in sortedRings) {
+      final r = ring.radius - 0.7;
+      final isNow = ring.band == UrgencyBand.now;
+      final tp = _text(
+        ring.band.label,
+        10,
+        (isNow ? kCrimson : ink).withValues(alpha: isNow ? 0.70 : 0.45),
+        spacing: 1.4,
+      );
+
+      for (final delta in ringAngleDeltas) {
+        if (delta.abs() > maxDev && delta != 0.0) continue;
+        final candAngle = la + delta;
+        final lp = _p(WebLayout.worldX(r, candAngle), WebLayout.worldY(r, candAngle), 0);
+        final rect = Rect.fromCenter(center: lp, width: tp.width + 12, height: tp.height + 6);
+        final inBounds = rect.right > 0 && rect.left < size.width && rect.bottom > 0 && rect.top < size.height;
+        if (inBounds && !_rectOverlapsAny(rect, placedLabelRects, pad: 4.0)) {
+          tp.paint(canvas, lp - Offset(tp.width / 2, tp.height / 2));
+          placedLabelRects.add(rect);
+          break; // successfully placed this ring's label without collision
+        }
+      }
     }
 
     // Edges.
@@ -251,7 +363,13 @@ class WebPainter extends CustomPainter {
       labelNode[n.id] = Offset(lx, ly);
     }
 
-    final chosen = pickLabels(labels, budget: labelBudget(zoom) + (selected != null ? 6 : 0), viewWidth: size.width, viewHeight: size.height);
+    final chosen = pickLabels(
+      labels,
+      budget: labelBudget(zoom) + (selected != null ? 6 : 0),
+      viewWidth: size.width,
+      viewHeight: size.height,
+      obstacles: placedLabelRects,
+    );
     for (final id in chosen) {
       final tp = labelText[id]!;
       final o = labelNode[id]!;
@@ -317,3 +435,33 @@ class WebPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant WebPainter old) => true;
 }
+
+int _ringPriority(UrgencyBand band) {
+  switch (band) {
+    case UrgencyBand.now:
+      return 100;
+    case UrgencyBand.later:
+      return 80;
+    case UrgencyBand.month:
+      return 70;
+    case UrgencyBand.week:
+      return 60;
+    case UrgencyBand.tomorrow:
+      return 50;
+    case UrgencyBand.nextMonth:
+      return 40;
+    case UrgencyBand.year:
+      return 30;
+    case UrgencyBand.done:
+      return 20;
+  }
+}
+
+bool _rectOverlapsAny(Rect r, List<Rect> others, {double pad = 4.0}) {
+  final padded = r.inflate(pad);
+  for (final o in others) {
+    if (padded.overlaps(o)) return true;
+  }
+  return false;
+}
+
