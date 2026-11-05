@@ -212,7 +212,13 @@ class _WebView3DState extends State<WebView3D> with SingleTickerProviderStateMix
             behavior: HitTestBehavior.opaque,
             onTapUp: (d) => _tap(d.localPosition),
             onDoubleTap: () => _fit(),
-            onScaleStart: (d) => _lastScale = 1,
+            onScaleStart: (d) {
+              _cam.isDragging = true;
+              _cam.yawVelocity = 0;
+              _cam.pitchVelocity = 0;
+              _lastScale = 1;
+              _kick();
+            },
             onScaleUpdate: (d) {
               if (d.pointerCount >= 2) {
                 _cam.panBy(d.focalPointDelta.dx, d.focalPointDelta.dy);
@@ -222,6 +228,13 @@ class _WebView3DState extends State<WebView3D> with SingleTickerProviderStateMix
                 _cam.orbit(d.focalPointDelta.dx, d.focalPointDelta.dy);
               }
               if (widget.reduceMotion) _cam.snapNow();
+              _kick();
+            },
+            onScaleEnd: (d) {
+              _cam.isDragging = false;
+              if (!widget.reduceMotion) {
+                _cam.fling(d.velocity.pixelsPerSecond.dx, d.velocity.pixelsPerSecond.dy);
+              }
               _kick();
             },
             child: CustomPaint(size: Size.infinite, painter: _painter, isComplex: true, willChange: true),

@@ -59,6 +59,13 @@ class WebCamera {
   double tPanX;
   double tPanY;
 
+  /// Inertial velocities applied upon fling release.
+  double yawVelocity = 0;
+  double pitchVelocity = 0;
+
+  /// True during active touch gestures to ensure zero-lag 1:1 reaction.
+  bool isDragging = false;
+
   /// Distance that frames the whole web (set by [fit]); zoom limits derive from it.
   double fitDistance = 30;
 
@@ -99,17 +106,36 @@ class WebCamera {
     tPitch = defaultPitch;
     tPanX = 0;
     tPanY = 0;
+    yawVelocity = 0;
+    pitchVelocity = 0;
     if (!animate) _snap();
   }
 
+  /// Orbit rotation with natural direction (sliding left moves web left, sliding right moves web right).
   void orbit(double dxPx, double dyPx) {
-    tYaw -= dxPx * 0.008;
-    tPitch = (tPitch + dyPx * 0.006).clamp(minPitch, maxPitch).toDouble();
+    final dYaw = dxPx * 0.0075;
+    final dPitch = dyPx * 0.0055;
+    tYaw += dYaw;
+    tPitch = (tPitch + dPitch).clamp(minPitch, maxPitch).toDouble();
+    if (isDragging) {
+      // Instant reaction during touch drag - zero input latency
+      yaw = tYaw;
+      pitch = tPitch;
+    }
+  }
+
+  /// Fling momentum on touch release for buttery smooth inertial coasting.
+  void fling(double vxPx, double vyPx) {
+    yawVelocity = (vxPx * 0.0075).clamp(-16.0, 16.0);
+    pitchVelocity = (vyPx * 0.0055).clamp(-6.0, 6.0);
   }
 
   void zoomBy(double factor) {
     if (factor <= 0) return;
     tDistance = (tDistance / factor).clamp(minDistance, maxDistance).toDouble();
+    if (isDragging) {
+      distance = tDistance;
+    }
   }
 
   /// Drag the content by a screen delta (the point under the finger follows it).
@@ -121,17 +147,41 @@ class WebCamera {
     final sy = math.sin(yaw);
     tPanX += vx * cy + vy * sy;
     tPanY += -vx * sy + vy * cy;
+    if (isDragging) {
+      panX = tPanX;
+      panY = tPanY;
+    }
   }
 
   void focusOn(Vec3 p, {double zoom = 2.4}) {
+    yawVelocity = 0;
+    pitchVelocity = 0;
     tPanX = p.x;
     tPanY = p.y;
     tDistance = (fitDistance / zoom).clamp(minDistance, maxDistance).toDouble();
   }
 
-  /// Advances the animation. Returns true while still moving.
+  /// Advances the animation with responsive damping and smooth velocity coasting.
   bool step(double dt) {
-    final k = 1 - math.exp(-9 * dt);
+    if (isDragging) {
+      return true;
+    }
+
+    // Apply smooth inertial coasting on flick
+    if (yawVelocity.abs() > 0.001 || pitchVelocity.abs() > 0.001) {
+      tYaw += yawVelocity * dt;
+      tPitch = (tPitch + pitchVelocity * dt).clamp(minPitch, maxPitch).toDouble();
+      
+      final friction = math.exp(-4.0 * dt);
+      yawVelocity *= friction;
+      pitchVelocity *= friction;
+      
+      if (yawVelocity.abs() < 0.001) yawVelocity = 0;
+      if (pitchVelocity.abs() < 0.001) pitchVelocity = 0;
+    }
+
+    // High responsiveness smoothing (fast reaction without jitter)
+    final k = 1 - math.exp(-22 * dt);
     yaw += (tYaw - yaw) * k;
     pitch += (tPitch - pitch) * k;
     distance += (tDistance - distance) * k;
@@ -145,6 +195,8 @@ class WebCamera {
   }
 
   bool get isMoving =>
+      yawVelocity.abs() > 0.001 ||
+      pitchVelocity.abs() > 0.001 ||
       (tYaw - yaw).abs() > 1e-3 ||
       (tPitch - pitch).abs() > 1e-3 ||
       (tDistance - distance).abs() > 1e-2 * math.max(1.0, distance * 0.05) ||
@@ -157,7 +209,10 @@ class WebCamera {
     distance = tDistance;
     panX = tPanX;
     panY = tPanY;
+    yawVelocity = 0;
+    pitchVelocity = 0;
   }
 
   void snapNow() => _snap();
 }
+
