@@ -18,12 +18,12 @@ class SpiderApp extends StatelessWidget {
       title: 'SpiderMind',
       debugShowCheckedModeBanner: false,
       navigatorKey: rootNavigatorKey,
-      theme: buildTheme(Brightness.dark),
+      theme: buildTheme(Brightness.light),
       darkTheme: buildTheme(Brightness.dark),
       themeMode: switch (mode) {
         ThemeModeSetting.light => ThemeMode.light,
         ThemeModeSetting.dark => ThemeMode.dark,
-        ThemeModeSetting.system => ThemeMode.dark,
+        ThemeModeSetting.system => ThemeMode.system,
       },
       home: const RootGate(),
     );
