@@ -59,7 +59,38 @@ void main() {
       expect(find.text('SPIDERMIND'), findsOneWidget);
       expect(find.text('Plan it. Track it. Own your day.'), findsOneWidget);
       expect(find.text('Sign in'), findsOneWidget);
+      expect(find.text('Forgot password?'), findsOneWidget);
       expect(find.text('New here? Create an account'), findsOneWidget);
+    });
+
+    testWidgets('toggles password visibility with eye icon button', (tester) async {
+      final state = AppState.test(auth: AuthStatus.signedOut);
+      await tester.pumpWidget(createTestApp(state: state, child: const AuthScreen()));
+      await tester.pump();
+
+      final passField = find.byType(EditableText).last;
+      expect(tester.widget<EditableText>(passField).obscureText, isTrue);
+
+      await tester.tap(find.byKey(const ValueKey('password_toggle_btn')));
+      await tester.pump();
+      expect(tester.widget<EditableText>(passField).obscureText, isFalse);
+
+      await tester.tap(find.byKey(const ValueKey('password_toggle_btn')));
+      await tester.pump();
+      expect(tester.widget<EditableText>(passField).obscureText, isTrue);
+    });
+
+    testWidgets('tapping forgot password opens forgot password dialog', (tester) async {
+      final state = AppState.test(auth: AuthStatus.signedOut);
+      await tester.pumpWidget(createTestApp(state: state, child: const AuthScreen()));
+      await tester.pump();
+
+      await tester.tap(find.byKey(const ValueKey('forgot_password_btn')));
+      await tester.pump();
+
+      expect(find.text('Forgot Password'), findsOneWidget);
+      expect(find.text('Account Email'), findsOneWidget);
+      expect(find.text('Send Code'), findsOneWidget);
     });
 
     testWidgets('switches to register form and back', (tester) async {
@@ -68,6 +99,7 @@ void main() {
       await tester.pump();
 
       // Tap toggle to register
+      await tester.ensureVisible(find.text('New here? Create an account'));
       await tester.tap(find.text('New here? Create an account'));
       await tester.pump();
 

@@ -14,6 +14,8 @@ const userSchema = new Schema(
     isVerified: { type: Boolean, default: false },
     verificationCode: { type: String, default: null },
     verificationCodeExpiresAt: { type: Date, default: null },
+    resetPasswordCode: { type: String, default: null },
+    resetPasswordCodeExpiresAt: { type: Date, default: null },
     createdAt: { type: Date, default: () => new Date() },
   },
   { versionKey: false },

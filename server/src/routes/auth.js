@@ -12,6 +12,8 @@ import {
   registerBody,
   sendVerificationBody,
   verifyCodeBody,
+  forgotPasswordBody,
+  resetPasswordBody,
 } from '../validation/schemas.js';
 import { issueTokens, revokeRefreshToken, rotateRefreshToken } from '../services/tokens.js';
 import { createDefaultSpaces } from '../services/spaces.js';
@@ -93,6 +95,54 @@ export function authRouter({ config, hub, email }) {
       await user.save();
       email?.sendWelcomeEmail({ email: user.email, name: user.name }).catch(() => {});
       res.json({ ok: true, verified: true, user: serializeUser(user) });
+    }),
+  );
+
+  r.post(
+    '/auth/forgot-password',
+    validate({ body: forgotPasswordBody }),
+    asyncHandler(async (req, res) => {
+      const user = await User.findOne({ email: req.body.email });
+      if (!user) {
+        return res.json({ ok: true, sent: false, message: 'If an account exists with this email, a reset code was sent.' });
+      }
+      const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
+      user.resetPasswordCode = resetCode;
+      user.resetPasswordCodeExpiresAt = new Date(Date.now() + 3600 * 1000); // 1 hour
+      await user.save();
+      const result = await email?.sendPasswordResetEmail({
+        email: user.email,
+        name: user.name,
+        code: resetCode,
+      });
+      res.json({ ok: true, sent: Boolean(result?.sent), message: 'Password reset code sent.' });
+    }),
+  );
+
+  r.post(
+    '/auth/reset-password',
+    validate({ body: resetPasswordBody }),
+    asyncHandler(async (req, res) => {
+      const { email: userEmail, code, newPassword } = req.body;
+      const user = await User.findOne({ email: userEmail });
+      if (!user) throw notFound('User not found');
+      if (!user.resetPasswordCode || user.resetPasswordCode !== code.trim()) {
+        throw badRequest('Invalid reset code');
+      }
+      if (user.resetPasswordCodeExpiresAt && new Date() > user.resetPasswordCodeExpiresAt) {
+        throw badRequest('Reset code has expired. Please request a new one.');
+      }
+      const newHash = await bcrypt.hash(newPassword, config.bcryptCost);
+      user.passwordHash = newHash;
+      user.resetPasswordCode = null;
+      user.resetPasswordCodeExpiresAt = null;
+      user.isVerified = true;
+      user.verificationCode = null;
+      user.verificationCodeExpiresAt = null;
+      await user.save();
+      await RefreshToken.deleteMany({ userId: user._id });
+      const tokens = await issueTokens(config, user._id);
+      res.json({ ok: true, message: 'Password reset successfully', user: serializeUser(user), ...tokens });
     }),
   );
 

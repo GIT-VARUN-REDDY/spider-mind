@@ -103,6 +103,56 @@ export function createEmailService({ config, logger = console }) {
     });
   }
 
+  async function sendPasswordResetEmail({ email, name, code }) {
+    const displayName = name?.trim() || 'Spider-Friend';
+    const subject = `🔐 Reset Your Spider Mind Password: ${code}`;
+
+    const htmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #03040A; color: #FFFFFF; margin: 0; padding: 24px; }
+    .card { max-width: 520px; margin: 0 auto; background: #0B0F1E; border: 1px solid rgba(255, 42, 68, 0.35); border-radius: 20px; padding: 36px 28px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5); }
+    .header { text-align: center; margin-bottom: 24px; }
+    .badge { display: inline-block; background: rgba(255, 42, 68, 0.2); color: #FF2A44; border: 1px solid rgba(255, 42, 68, 0.5); border-radius: 9999px; padding: 6px 18px; font-weight: 800; font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px; }
+    h1 { color: #FFFFFF; font-size: 24px; margin: 18px 0 8px; font-weight: 800; letter-spacing: -0.5px; }
+    p { color: #A0AEC0; font-size: 15px; line-height: 1.6; margin: 8px 0; }
+    .code-container { background: rgba(255, 42, 68, 0.05); border: 2px dashed rgba(255, 42, 68, 0.5); border-radius: 14px; padding: 20px; text-align: center; margin: 28px 0; }
+    .code-label { font-size: 12px; color: #FF6B7A; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px; font-weight: 700; }
+    .code { font-size: 36px; font-weight: 900; letter-spacing: 8px; color: #FFFFFF; font-family: monospace; text-shadow: 0 0 16px rgba(255, 42, 68, 0.6); }
+    .footer { text-align: center; margin-top: 28px; font-size: 12px; color: #718096; border-top: 1px solid rgba(255, 255, 255, 0.06); padding-top: 20px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="header">
+      <div class="badge">Security Alert</div>
+      <h1>Password Reset Request</h1>
+      <p>Hey ${displayName}, we received a request to reset your Spider Mind account password.</p>
+    </div>
+    <div class="code-container">
+      <div class="code-label">Password Reset Code</div>
+      <div class="code">${code}</div>
+    </div>
+    <p style="font-size: 13px; color: #A0AEC0; text-align: center;">This code will expire in 1 hour. If you did not make this request, please ignore this email and your password will remain unchanged.</p>
+    <div class="footer">
+      © ${new Date().getFullYear()} Spider Mind. Built for deep focus and superhuman execution.
+    </div>
+  </div>
+</body>
+</html>
+    `.trim();
+
+    return sendEmail({
+      to: email,
+      subject,
+      htmlContent,
+      textContent: `Hey ${displayName},\n\nYour Spider Mind password reset code is: ${code}\n\nEnter this code along with your new password in the app to reset your password.\n\nCode expires in 1 hour. If you didn't request this, ignore this email.`,
+    });
+  }
+
   async function sendWelcomeEmail({ email, name }) {
     const displayName = name?.trim() || 'Spider-Friend';
     const subject = `Welcome to Spider Mind, ${displayName}! 🕸️`;
@@ -200,6 +250,7 @@ export function createEmailService({ config, logger = console }) {
     isConfigured,
     sendEmail,
     sendVerificationEmail,
+    sendPasswordResetEmail,
     sendWelcomeEmail,
     sendReminderEmail,
   };

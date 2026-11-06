@@ -25,6 +25,14 @@ export const verifyCodeBody = z.object({
   email: z.string().trim().toLowerCase().email().max(254),
   code: z.string().trim().min(4).max(10),
 });
+export const forgotPasswordBody = z.object({
+  email: z.string().trim().toLowerCase().email().max(254),
+});
+export const resetPasswordBody = z.object({
+  email: z.string().trim().toLowerCase().email().max(254),
+  code: z.string().trim().min(4).max(10),
+  newPassword: z.string().min(8).max(128),
+});
 export const loginBody = z.object({
   email: z.string().trim().toLowerCase().max(254),
   password: z.string().min(1).max(128),

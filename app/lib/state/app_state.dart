@@ -377,6 +377,63 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  Future<bool> forgotPassword(String email) async {
+    _busy = true;
+    _authError = null;
+    notifyListeners();
+    try {
+      await _api.call('POST', '/auth/forgot-password', body: {'email': email.trim()}, auth: false);
+      _busy = false;
+      notifyListeners();
+      return true;
+    } on ApiException catch (e) {
+      _authError = e.message;
+    } catch (_) {
+      _authError = 'Could not request password reset. Please try again.';
+    }
+    _busy = false;
+    notifyListeners();
+    return false;
+  }
+
+  Future<bool> resetPassword({
+    required String email,
+    required String code,
+    required String newPassword,
+  }) async {
+    _busy = true;
+    _authError = null;
+    notifyListeners();
+    try {
+      final j = await _api.call('POST', '/auth/reset-password', body: {
+        'email': email.trim(),
+        'code': code.trim(),
+        'newPassword': newPassword,
+      }, auth: false) as Map<String, dynamic>;
+
+      _api.setTokens(AuthTokens(j['accessToken'] as String, j['refreshToken'] as String));
+      _user = UserProfile.fromJson(Map<String, dynamic>.from(j['user'] as Map));
+      await _store.saveUser(_user!);
+      await _store.clearAccountData();
+      _threads.clear();
+      _spaces.clear();
+      _outbox = [];
+      _invalidate();
+      _auth = AuthStatus.signedIn;
+      _busy = false;
+      notifyListeners();
+      unawaited(_start());
+      return true;
+    } on ApiException catch (e) {
+      _authError = e.message;
+    } catch (_) {
+      _authError = 'Password reset failed. Please check the code and try again.';
+    }
+    _busy = false;
+    notifyListeners();
+    return false;
+  }
+
   Future<void> signOut() async {
     final r = _api.refresh;
     if (r != null) {

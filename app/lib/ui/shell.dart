@@ -390,18 +390,41 @@ class _AuthScreenState extends State<AuthScreen> {
                           'Password',
                           helper: _register ? 'At least 8 characters' : null,
                           suffix: IconButton(
+                            key: const ValueKey('password_toggle_btn'),
                             icon: Icon(
-                              _hide ? Icons.visibility : Icons.visibility_off,
-                              color: Colors.white.withValues(alpha: 0.6),
+                              _hide ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                              color: _hide ? Colors.white.withValues(alpha: 0.6) : kBlue,
                             ),
                             onPressed: () => setState(() => _hide = !_hide),
-                            tooltip: 'Show or hide password',
+                            tooltip: _hide ? 'Show password' : 'Hide password',
                           ),
                         ),
                         autofillHints: [_register ? AutofillHints.newPassword : AutofillHints.password],
                         onFieldSubmitted: (_) => _submit(),
                         validator: (v) => (v ?? '').length >= 8 ? null : 'Use at least 8 characters',
                       ),
+                      if (!_register) ...[
+                        const SizedBox(height: 6),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                            key: const ValueKey('forgot_password_btn'),
+                            onPressed: () => showForgotPasswordDialog(context, initialEmail: _email.text),
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                              visualDensity: VisualDensity.compact,
+                            ),
+                            child: const Text(
+                              'Forgot password?',
+                              style: TextStyle(
+                                color: kBlue,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                       if (s.authError != null)
                         Padding(
                           padding: const EdgeInsets.only(top: 12),
@@ -799,6 +822,320 @@ Future<void> showEmailVerificationDialog(BuildContext context) async {
                 child: isSubmitting
                     ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                     : const Text('Verify'),
+              ),
+            ],
+          );
+        },
+      );
+    },
+  );
+}
+
+Future<void> showForgotPasswordDialog(BuildContext context, {String? initialEmail}) async {
+  final state = context.read<AppState>();
+  final emailCtrl = TextEditingController(text: initialEmail?.trim() ?? '');
+  final codeCtrl = TextEditingController();
+  final newPassCtrl = TextEditingController();
+  final confirmPassCtrl = TextEditingController();
+
+  var step = 1; // 1 = enter email, 2 = enter code & new password
+  var isSubmitting = false;
+  var isResending = false;
+  var hideNewPass = true;
+  var hideConfirmPass = true;
+  String? errorMsg;
+  String? infoMsg;
+
+  await showDialog<void>(
+    context: context,
+    barrierDismissible: true,
+    builder: (ctx) {
+      return StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          return AlertDialog(
+            backgroundColor: const Color(0xFF0B0F1E),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+              side: const BorderSide(color: Color(0x3332B4FF)),
+            ),
+            title: Row(
+              children: [
+                const Icon(Icons.lock_reset_rounded, color: kCrimson, size: 28),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    step == 1 ? 'Forgot Password' : 'Reset Password',
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 18),
+                  ),
+                ),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 380),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (step == 1) ...[
+                      Text(
+                        'Enter your account email to receive a 6-digit password reset code.',
+                        style: TextStyle(color: Colors.white.withValues(alpha: 0.75), fontSize: 13, height: 1.4),
+                      ),
+                      const SizedBox(height: 18),
+                      TextField(
+                        controller: emailCtrl,
+                        keyboardType: TextInputType.emailAddress,
+                        autofocus: true,
+                        style: const TextStyle(color: Colors.white, fontSize: 15),
+                        decoration: InputDecoration(
+                          labelText: 'Account Email',
+                          labelStyle: TextStyle(color: Colors.white.withValues(alpha: 0.65), fontSize: 14),
+                          prefixIcon: const Icon(Icons.email_outlined, color: kBlue, size: 20),
+                          filled: true,
+                          fillColor: const Color(0xFF141A2E),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: const BorderSide(color: Color(0x4432B4FF)),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: const BorderSide(color: kBlue, width: 2),
+                          ),
+                        ),
+                      ),
+                    ] else ...[
+                      Text(
+                        'Enter the 6-digit code sent to ${emailCtrl.text.trim()} and choose a new password.',
+                        style: TextStyle(color: Colors.white.withValues(alpha: 0.75), fontSize: 13, height: 1.4),
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: codeCtrl,
+                        keyboardType: TextInputType.number,
+                        maxLength: 6,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 24,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 8,
+                          fontFamily: 'monospace',
+                        ),
+                        decoration: InputDecoration(
+                          hintText: '000000',
+                          hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.25), fontSize: 24, letterSpacing: 8),
+                          counterText: '',
+                          filled: true,
+                          fillColor: const Color(0xFF141A2E),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: const BorderSide(color: Color(0x4432B4FF)),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: const BorderSide(color: kBlue, width: 2),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      TextField(
+                        controller: newPassCtrl,
+                        obscureText: hideNewPass,
+                        style: const TextStyle(color: Colors.white, fontSize: 15),
+                        decoration: InputDecoration(
+                          labelText: 'New Password (min 8 chars)',
+                          labelStyle: TextStyle(color: Colors.white.withValues(alpha: 0.65), fontSize: 13),
+                          prefixIcon: const Icon(Icons.lock_outline, color: kBlue, size: 20),
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              hideNewPass ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                              color: hideNewPass ? Colors.white.withValues(alpha: 0.6) : kBlue,
+                              size: 20,
+                            ),
+                            tooltip: hideNewPass ? 'Show password' : 'Hide password',
+                            onPressed: () => setDialogState(() => hideNewPass = !hideNewPass),
+                          ),
+                          filled: true,
+                          fillColor: const Color(0xFF141A2E),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: const BorderSide(color: Color(0x4432B4FF)),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: const BorderSide(color: kBlue, width: 2),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: confirmPassCtrl,
+                        obscureText: hideConfirmPass,
+                        style: const TextStyle(color: Colors.white, fontSize: 15),
+                        decoration: InputDecoration(
+                          labelText: 'Confirm New Password',
+                          labelStyle: TextStyle(color: Colors.white.withValues(alpha: 0.65), fontSize: 13),
+                          prefixIcon: const Icon(Icons.lock_outline, color: kBlue, size: 20),
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              hideConfirmPass ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                              color: hideConfirmPass ? Colors.white.withValues(alpha: 0.6) : kBlue,
+                              size: 20,
+                            ),
+                            tooltip: hideConfirmPass ? 'Show password' : 'Hide password',
+                            onPressed: () => setDialogState(() => hideConfirmPass = !hideConfirmPass),
+                          ),
+                          filled: true,
+                          fillColor: const Color(0xFF141A2E),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: const BorderSide(color: Color(0x4432B4FF)),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(14),
+                            borderSide: const BorderSide(color: kBlue, width: 2),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          TextButton(
+                            onPressed: () => setDialogState(() {
+                              step = 1;
+                              errorMsg = null;
+                              infoMsg = null;
+                            }),
+                            child: const Text('Change Email', style: TextStyle(color: Color(0xFFA0AEC0), fontSize: 12)),
+                          ),
+                          TextButton.icon(
+                            onPressed: isResending
+                                ? null
+                                : () async {
+                                    setDialogState(() {
+                                      isResending = true;
+                                      errorMsg = null;
+                                      infoMsg = null;
+                                    });
+                                    final ok = await state.forgotPassword(emailCtrl.text.trim());
+                                    setDialogState(() {
+                                      isResending = false;
+                                      if (ok) {
+                                        infoMsg = 'Code resent to ${emailCtrl.text.trim()}';
+                                      } else {
+                                        errorMsg = state.authError ?? 'Failed to resend code';
+                                      }
+                                    });
+                                  },
+                            icon: isResending
+                                ? const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2))
+                                : const Icon(Icons.refresh_rounded, size: 15, color: kBlue),
+                            label: Text(
+                              isResending ? 'Sending...' : 'Resend Code',
+                              style: const TextStyle(color: kBlue, fontSize: 12),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                    if (errorMsg != null) ...[
+                      const SizedBox(height: 10),
+                      Text(
+                        errorMsg!,
+                        style: const TextStyle(color: Color(0xFFFF5252), fontSize: 13),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                    if (infoMsg != null) ...[
+                      const SizedBox(height: 10),
+                      Text(
+                        infoMsg!,
+                        style: const TextStyle(color: Color(0xFF2ECC71), fontSize: 13),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: Text('Cancel', style: TextStyle(color: Colors.white.withValues(alpha: 0.6))),
+              ),
+              FilledButton(
+                style: FilledButton.styleFrom(backgroundColor: kCrimson),
+                onPressed: isSubmitting
+                    ? null
+                    : () async {
+                        if (step == 1) {
+                          final em = emailCtrl.text.trim();
+                          if (!em.contains('@')) {
+                            setDialogState(() => errorMsg = 'Please enter a valid email');
+                            return;
+                          }
+                          setDialogState(() {
+                            isSubmitting = true;
+                            errorMsg = null;
+                            infoMsg = null;
+                          });
+                          final ok = await state.forgotPassword(em);
+                          setDialogState(() {
+                            isSubmitting = false;
+                            if (ok) {
+                              step = 2;
+                              infoMsg = 'Reset code sent to $em';
+                            } else {
+                              errorMsg = state.authError ?? 'Failed to send reset code';
+                            }
+                          });
+                        } else {
+                          final cd = codeCtrl.text.trim();
+                          final np = newPassCtrl.text;
+                          final cp = confirmPassCtrl.text;
+                          if (cd.length < 4) {
+                            setDialogState(() => errorMsg = 'Enter the 6-digit code');
+                            return;
+                          }
+                          if (np.length < 8) {
+                            setDialogState(() => errorMsg = 'Password must be at least 8 characters');
+                            return;
+                          }
+                          if (np != cp) {
+                            setDialogState(() => errorMsg = 'Passwords do not match');
+                            return;
+                          }
+                          setDialogState(() {
+                            isSubmitting = true;
+                            errorMsg = null;
+                          });
+                          final ok = await state.resetPassword(
+                            email: emailCtrl.text.trim(),
+                            code: cd,
+                            newPassword: np,
+                          );
+                          if (!ctx.mounted) return;
+                          if (ok) {
+                            Navigator.of(ctx).pop();
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                backgroundColor: Color(0xFF1E824C),
+                                content: Text('🎉 Password reset successfully! You are now logged in.'),
+                              ),
+                            );
+                          } else {
+                            setDialogState(() {
+                              isSubmitting = false;
+                              errorMsg = state.authError ?? 'Invalid or expired reset code';
+                            });
+                          }
+                        }
+                      },
+                child: isSubmitting
+                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : Text(step == 1 ? 'Send Code' : 'Reset Password'),
               ),
             ],
           );
