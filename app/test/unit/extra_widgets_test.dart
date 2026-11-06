@@ -1,7 +1,13 @@
+import 'dart:ui' show PictureRecorder;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
+import 'package:spider_mind/features/web3d/web_camera.dart';
+import 'package:spider_mind/features/web3d/web_edges.dart';
+import 'package:spider_mind/features/web3d/web_layout.dart';
 import 'package:spider_mind/features/web3d/web_legend.dart';
+import 'package:spider_mind/features/web3d/web_painter.dart';
 import 'package:spider_mind/models/space.dart';
 import 'package:spider_mind/models/thread.dart';
 import 'package:spider_mind/state/app_state.dart';
@@ -143,4 +149,60 @@ void main() {
     // Should now simulate +3.0d
     expect(find.textContaining('SIMULATING: +3.0d'), findsOneWidget);
   });
+
+  test('WebLayout applies gravitational dip to overdue threads along z-axis', () {
+    final now = DateTime.utc(2026, 11, 6, 12, 0);
+    final normalThread = Thread.draft(
+      title: 'Future Task',
+      spaceId: 's1',
+      dueAt: DateTime.utc(2026, 11, 20, 12, 0),
+    );
+    final overdueThread = Thread.draft(
+      title: 'Overdue Task',
+      spaceId: 's1',
+      dueAt: DateTime.utc(2026, 11, 1, 12, 0),
+    );
+
+    final layout = WebLayout.compute(
+      threads: [normalThread, overdueThread],
+      spaces: const [space1],
+      now: now,
+    );
+
+    final normalZ = layout.nodes[normalThread.id]!.position.z;
+    final overdueZ = layout.nodes[overdueThread.id]!.position.z;
+
+    // Overdue task sinks deeper into z (gravitational well)
+    expect(overdueZ, lessThan(normalZ));
+    expect((normalZ - overdueZ).abs(), closeTo(1.1, 0.05));
+  });
+
+  test('WebPainter renders silk tension and shockwaves without error', () {
+    final now = DateTime.utc(2026, 11, 6, 12, 0);
+    final tA = Thread.draft(title: 'Node A', spaceId: 's1').copyWith(status: ThreadStatus.doing);
+    final tB = Thread.draft(title: 'Node B', spaceId: 's1').copyWith(links: [tA.id], status: ThreadStatus.done);
+    final layout = WebLayout.compute(threads: [tA, tB], spaces: const [space1], now: now);
+
+    final scene = WebScene()
+      ..layout = layout
+      ..byId = {tA.id: tA, tB.id: tB}
+      ..edges = [WebEdge(a: tA.id, b: tB.id, weight: 3.0, explicit: true)]
+      ..now = now
+      ..time = 1.5
+      ..shockwaveStart = {tB.id: 0.5};
+
+    final camera = WebCamera()
+      ..width = 800
+      ..height = 600;
+
+    final painter = WebPainter(scene, camera);
+    final recorder = PictureRecorder();
+    final canvas = Canvas(recorder);
+
+    // Painting living physics edges, pulses, and shockwaves should run smoothly
+    painter.paint(canvas, const Size(800, 600));
+    final picture = recorder.endRecording();
+    expect(picture, isNotNull);
+  });
 }
+

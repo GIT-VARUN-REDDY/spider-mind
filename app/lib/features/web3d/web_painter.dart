@@ -19,6 +19,7 @@ class WebScene {
   String? selectedId;
   String? keyword;
   Map<String, double> flashStart = {}; // thread id -> scene time it started
+  Map<String, double> shockwaveStart = {}; // thread id -> completion shockwave time
   double time = 0;
   DateTime now = DateTime.now();
   Map<String, Vec3> animatedPositions = {};
@@ -310,25 +311,97 @@ class WebPainter extends CustomPainter {
       final ca = layout.spokes[na.spokeIndex].color, cb = layout.spokes[nb.spokeIndex].color;
       final col = Color.lerp(ca, cb, 0.5)!;
       final alpha = (touches ? 0.95 : (e.explicit ? 0.55 : 0.28)) * (dim ? 0.35 : 1.0);
+      final ta = scene.byId[e.a], tb = scene.byId[e.b];
+      final overdueA = ta != null && isOverdue(ta, scene.now);
+      final overdueB = tb != null && isOverdue(tb, scene.now);
+      final hasOverdue = overdueA || overdueB;
+      final hasDoing = (ta?.status == ThreadStatus.doing) || (tb?.status == ThreadStatus.doing);
+      final bothDone = (ta?.isDone ?? false) && (tb?.isDone ?? false);
+      final anyDone = (ta?.isDone ?? false) || (tb?.isDone ?? false);
+
       if (e.explicit) {
-        // silk: curve lifted towards the camera in z
+        // Dynamic Tension & Catenary physics:
+        // Overdue tasks pull silk taut (low sag + fast harmonic tremble).
+        // Completed tasks relax into deep, calm drooping curves.
         final mx = (pa.x + pb.x) / 2, my = (pa.y + pb.y) / 2;
         final len = math.sqrt(math.pow(pa.x - pb.x, 2) + math.pow(pa.y - pb.y, 2)).toDouble();
-        final c = _p(mx * 0.82, my * 0.82, (pa.z + pb.z) / 2 + len * 0.12);
+
+        double arcRatio = 0.12;
+        double vibZ = 0.0;
+        if (hasOverdue) {
+          arcRatio = 0.03; // Taut mechanical tension
+          if (!scene.reduceMotion) vibZ = math.sin(scene.time * 24.0 + len * 3.0) * 0.03 * len;
+        } else if (bothDone) {
+          arcRatio = 0.23; // Relaxed catenary sag
+          if (!scene.reduceMotion) vibZ = math.sin(scene.time * 1.8) * 0.014 * len;
+        } else if (hasDoing) {
+          arcRatio = 0.075; // Energized tension
+          if (!scene.reduceMotion) vibZ = math.sin(scene.time * 11.0) * 0.015 * len;
+        }
+
+        final cz = (pa.z + pb.z) / 2 + len * arcRatio + vibZ;
+        final pullFactor = hasOverdue ? 0.94 : (bothDone ? 0.72 : 0.82);
+        final c = _p(mx * pullFactor, my * pullFactor, cz);
         final path = Path()
           ..moveTo(oa.dx, oa.dy)
           ..quadraticBezierTo(c.dx, c.dy, ob.dx, ob.dy);
-        if (touches && !low) {
-          canvas.drawPath(path, Paint()..style = PaintingStyle.stroke..strokeWidth = 5..color = col.withValues(alpha: 0.18)..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4));
+
+        // Silk outer glow
+        if (!low && (touches || hasOverdue || hasDoing)) {
+          final glowCol = hasOverdue ? kCrimson : (hasDoing ? const Color(0xFF00E5FF) : col);
+          canvas.drawPath(
+            path,
+            Paint()
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = touches ? 5.5 : 3.5
+              ..color = glowCol.withValues(alpha: touches ? 0.28 : 0.16)
+              ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
+          );
         }
-        canvas.drawPath(path, Paint()..style = PaintingStyle.stroke..strokeWidth = touches ? 2.2 : 1.5..color = col.withValues(alpha: alpha));
-        if (touches && !scene.reduceMotion && !low) {
-          for (var k = 0; k < 3; k++) {
-            final t = ((scene.time * 0.5) + k / 3) % 1.0;
-            final u = 1 - t;
-            final x = u * u * oa.dx + 2 * u * t * c.dx + t * t * ob.dx;
-            final y = u * u * oa.dy + 2 * u * t * c.dy + t * t * ob.dy;
-            canvas.drawCircle(Offset(x, y), 2.4, Paint()..color = Colors.white.withValues(alpha: 0.9));
+
+        // Silk core strand
+        final strandWidth = touches ? 2.3 : (hasOverdue ? 1.9 : 1.4);
+        final strandColor = hasOverdue
+            ? Color.lerp(col, kCrimson, 0.65)!
+            : (hasDoing ? Color.lerp(col, const Color(0xFF00E5FF), 0.5)! : col);
+        canvas.drawPath(
+          path,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = strandWidth
+            ..color = strandColor.withValues(alpha: alpha),
+        );
+
+        // Bioluminescent Fiber-Optic Pulses:
+        // Living energy packets flow from upstream to downstream nodes along the strand
+        if (!scene.reduceMotion && !low) {
+          final packetCount = touches ? 3 : (hasDoing || hasOverdue ? 2 : 1);
+          final speed = hasOverdue ? 0.95 : (hasDoing ? 0.72 : (bothDone ? 0.25 : 0.42));
+          final pulseColor = hasOverdue
+              ? const Color(0xFFFF2A44)
+              : (hasDoing ? const Color(0xFF00F5FF) : (anyDone ? const Color(0xFF50FA7B) : const Color(0xFF80D8FF)));
+
+          for (var k = 0; k < packetCount; k++) {
+            final tPulse = ((scene.time * speed) + k / packetCount) % 1.0;
+            final u = 1 - tPulse;
+            final x = u * u * oa.dx + 2 * u * tPulse * c.dx + tPulse * tPulse * ob.dx;
+            final y = u * u * oa.dy + 2 * u * tPulse * c.dy + tPulse * tPulse * ob.dy;
+            final pulseOffset = Offset(x, y);
+
+            // Bioluminescent glow halo
+            canvas.drawCircle(
+              pulseOffset,
+              touches ? 4.5 : 3.2,
+              Paint()
+                ..color = pulseColor.withValues(alpha: touches ? 0.8 : 0.45)
+                ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3.2),
+            );
+            // Crisp white energy particle
+            canvas.drawCircle(
+              pulseOffset,
+              touches ? 2.2 : 1.5,
+              Paint()..color = Colors.white.withValues(alpha: 0.95),
+            );
           }
         }
       } else {
@@ -338,6 +411,17 @@ class WebPainter extends CustomPainter {
         final paint = Paint()..color = col.withValues(alpha: alpha)..strokeWidth = 1.4..strokeCap = StrokeCap.round;
         final pts = <Offset>[for (var i = 0; i <= n; i++) Offset.lerp(oa, ob, n == 0 ? 0 : i / n)!];
         canvas.drawPoints(PointMode.points, pts, paint);
+
+        if (touches && !scene.reduceMotion && !low) {
+          final tPulse = (scene.time * 0.6) % 1.0;
+          final pulsePt = Offset.lerp(oa, ob, tPulse)!;
+          canvas.drawCircle(
+            pulsePt,
+            3.2,
+            Paint()..color = const Color(0xFF00E5FF).withValues(alpha: 0.75)..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3.0),
+          );
+          canvas.drawCircle(pulsePt, 1.6, Paint()..color = Colors.white);
+        }
       }
     }
 
@@ -383,6 +467,34 @@ class WebPainter extends CustomPainter {
       if (flashAt != null) {
         final k = ((scene.time - flashAt) / 2.5).clamp(0.0, 1.0).toDouble();
         if (k < 1) canvas.drawCircle(c, r + 6 + 40 * k, Paint()..style = PaintingStyle.stroke..strokeWidth = 2..color = kBlue.withValues(alpha: (1 - k) * 0.9));
+      }
+      final shockAt = scene.shockwaveStart[n.id];
+      if (shockAt != null) {
+        final elapsed = scene.time - shockAt;
+        if (elapsed >= 0 && elapsed <= 2.0) {
+          final k = (elapsed / 2.0).clamp(0.0, 1.0);
+          final waveR = r + 8 + 110 * k;
+          final waveAlpha = (1.0 - k).clamp(0.0, 1.0);
+          if (!low) {
+            canvas.drawCircle(
+              c,
+              waveR,
+              Paint()
+                ..style = PaintingStyle.stroke
+                ..strokeWidth = (1.0 - k) * 4.0 + 1.0
+                ..color = const Color(0xFF00FFCC).withValues(alpha: waveAlpha * 0.72)
+                ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5.0),
+            );
+          }
+          canvas.drawCircle(
+            c,
+            waveR,
+            Paint()
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 1.8
+              ..color = Colors.white.withValues(alpha: waveAlpha * 0.88),
+          );
+        }
       }
       if (!low && (isSel || t.status == ThreadStatus.doing)) {
         canvas.drawCircle(c, r * 2.2, Paint()..color = color.withValues(alpha: 0.22 * alpha)..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8));

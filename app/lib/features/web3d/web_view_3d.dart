@@ -95,7 +95,10 @@ class _WebView3DState extends State<WebView3D> with SingleTickerProviderStateMix
         timeShifted;
     if (structural) _rebuildLayout();
     for (final id in widget.flashIds) {
-      if (!old.flashIds.contains(id)) _scene.flashStart[id] = _scene.time;
+      if (!old.flashIds.contains(id)) {
+        _scene.flashStart[id] = _scene.time;
+        _scene.shockwaveStart[id] = _scene.time;
+      }
     }
     if (widget.selectedId != old.selectedId && widget.selectedId != null && old.selectedId == null) {
       // keep the camera where the user left it; selection only highlights
@@ -203,7 +206,7 @@ class _WebView3DState extends State<WebView3D> with SingleTickerProviderStateMix
     if (_cam.isMoving) return true;
     if (_painter.isAnimatingLabels) return true;
     if (_isAnimatingNodes) return true;
-    if (widget.reduceMotion) return _scene.flashStart.isNotEmpty;
+    if (widget.reduceMotion) return _scene.flashStart.isNotEmpty || _scene.shockwaveStart.isNotEmpty;
     return true;
   }
 
@@ -223,6 +226,7 @@ class _WebView3DState extends State<WebView3D> with SingleTickerProviderStateMix
     _cam.step(dt);
     _isAnimatingNodes = _stepNodePositions(dt);
     _scene.flashStart.removeWhere((_, s) => _scene.time - s > 2.6);
+    _scene.shockwaveStart.removeWhere((_, s) => _scene.time - s > 2.2);
     _frame.value++;
     if (!_needsAnimation) _ticker.stop();
   }
