@@ -18,6 +18,13 @@ export const registerBody = z.object({
   name: z.string().trim().min(1).max(60),
   timezone: timezone.optional(),
 });
+export const sendVerificationBody = z.object({
+  email: z.string().trim().toLowerCase().email().max(254),
+});
+export const verifyCodeBody = z.object({
+  email: z.string().trim().toLowerCase().email().max(254),
+  code: z.string().trim().min(4).max(10),
+});
 export const loginBody = z.object({
   email: z.string().trim().toLowerCase().max(254),
   password: z.string().min(1).max(128),

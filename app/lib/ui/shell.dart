@@ -572,9 +572,48 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    final user = context.watch<AppState>().user;
+    final isUnverified = user != null && !user.isVerified;
     const pages = [WebTab(), ThreadsScreen(), InsightsScreen(), SettingsScreen()];
     return Scaffold(
-      body: IndexedStack(index: _tab, children: pages),
+      body: Column(
+        children: [
+          if (isUnverified)
+            Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFF160D1E),
+                border: Border(bottom: BorderSide(color: kCrimson.withValues(alpha: 0.4))),
+              ),
+              child: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.mark_email_unread_outlined, size: 20, color: kCrimson),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Verify your email to secure your Mind Web.',
+                          style: TextStyle(color: Colors.white.withValues(alpha: 0.9), fontSize: 13),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () => showEmailVerificationDialog(context),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        child: const Text('Verify', style: TextStyle(color: kBlue, fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          Expanded(child: IndexedStack(index: _tab, children: pages)),
+        ],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => openThreadEditor(context),
         icon: const Icon(Icons.add),
@@ -594,6 +633,179 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
       ),
     );
   }
+}
+
+Future<void> showEmailVerificationDialog(BuildContext context) async {
+  final state = context.read<AppState>();
+  final user = state.user;
+  if (user == null) return;
+
+  final codeCtrl = TextEditingController();
+  var isSubmitting = false;
+  var isResending = false;
+  String? errorMsg;
+  String? infoMsg;
+
+  await showDialog<void>(
+    context: context,
+    barrierDismissible: true,
+    builder: (ctx) {
+      return StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          return AlertDialog(
+            backgroundColor: const Color(0xFF0B0F1E),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+              side: const BorderSide(color: Color(0x3332B4FF)),
+            ),
+            title: const Row(
+              children: [
+                Icon(Icons.mark_email_unread_rounded, color: kCrimson, size: 26),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Email Verification',
+                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 18),
+                  ),
+                ),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'We sent a 6-digit verification code to:\n${user.email}',
+                    style: TextStyle(color: Colors.white.withValues(alpha: 0.75), fontSize: 13, height: 1.4),
+                  ),
+                  const SizedBox(height: 18),
+                  TextField(
+                    controller: codeCtrl,
+                    autofocus: true,
+                    keyboardType: TextInputType.number,
+                    maxLength: 6,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 26,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 8,
+                      fontFamily: 'monospace',
+                    ),
+                    decoration: InputDecoration(
+                      hintText: '000000',
+                      hintStyle: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.25),
+                        fontSize: 26,
+                        letterSpacing: 8,
+                      ),
+                      counterText: '',
+                      filled: true,
+                      fillColor: const Color(0xFF141A2E),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: const BorderSide(color: Color(0x4432B4FF)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: const BorderSide(color: kBlue, width: 2),
+                      ),
+                    ),
+                  ),
+                  if (errorMsg != null) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      errorMsg!,
+                      style: const TextStyle(color: Color(0xFFFF5252), fontSize: 13),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                  if (infoMsg != null) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      infoMsg!,
+                      style: const TextStyle(color: Color(0xFF2ECC71), fontSize: 13),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                  TextButton.icon(
+                    onPressed: isResending
+                        ? null
+                        : () async {
+                            setDialogState(() {
+                              isResending = true;
+                              errorMsg = null;
+                              infoMsg = null;
+                            });
+                            final ok = await state.resendVerification(user.email);
+                            setDialogState(() {
+                              isResending = false;
+                              if (ok) {
+                                infoMsg = 'New code sent to ${user.email}';
+                              } else {
+                                errorMsg = 'Failed to resend. Please try again.';
+                              }
+                            });
+                          },
+                    icon: isResending
+                        ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.refresh_rounded, size: 16, color: kBlue),
+                    label: Text(
+                      isResending ? 'Sending...' : 'Resend Code',
+                      style: const TextStyle(color: kBlue, fontSize: 13),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: Text('Later', style: TextStyle(color: Colors.white.withValues(alpha: 0.6))),
+              ),
+              FilledButton(
+                style: FilledButton.styleFrom(backgroundColor: kCrimson),
+                onPressed: isSubmitting
+                    ? null
+                    : () async {
+                        final code = codeCtrl.text.trim();
+                        if (code.length < 4) {
+                          setDialogState(() => errorMsg = 'Enter the 6-digit code');
+                          return;
+                        }
+                        setDialogState(() {
+                          isSubmitting = true;
+                          errorMsg = null;
+                        });
+                        final ok = await state.verifyCode(email: user.email, code: code);
+                        if (!ctx.mounted) return;
+                        if (ok) {
+                          Navigator.of(ctx).pop();
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              backgroundColor: Color(0xFF1E824C),
+                              content: Text('🎉 Email verified successfully!'),
+                            ),
+                          );
+                        } else {
+                          setDialogState(() {
+                            isSubmitting = false;
+                            errorMsg = state.authError ?? 'Invalid or expired code';
+                          });
+                        }
+                      },
+                child: isSubmitting
+                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Text('Verify'),
+              ),
+            ],
+          );
+        },
+      );
+    },
+  );
 }
 
 // ------------------------------------------------------------------ web tab

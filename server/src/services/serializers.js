@@ -22,7 +22,13 @@ export function serializeThread(t) {
 }
 
 export const serializeSpace = (s) => ({ id: String(s._id), name: s.name, color: s.color, order: s.order });
-export const serializeUser = (u) => ({ id: String(u._id ?? u.id), email: u.email, name: u.name, timezone: u.timezone });
+export const serializeUser = (u) => ({
+  id: String(u._id ?? u.id),
+  email: u.email,
+  name: u.name,
+  timezone: u.timezone,
+  isVerified: Boolean(u.isVerified),
+});
 export const serializeActivity = (a) => ({
   id: String(a._id),
   kind: a.kind,

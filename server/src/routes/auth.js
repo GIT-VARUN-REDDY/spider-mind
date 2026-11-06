@@ -2,8 +2,17 @@ import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { Activity, Device, RefreshToken, Space, Thread, User } from '../models/index.js';
 import { asyncHandler, authenticate, validate } from '../middleware/common.js';
-import { conflict, unauthorized } from '../utils/errors.js';
-import { deleteMeBody, googleAuthBody, loginBody, patchMeBody, refreshBody, registerBody } from '../validation/schemas.js';
+import { badRequest, conflict, notFound, unauthorized } from '../utils/errors.js';
+import {
+  deleteMeBody,
+  googleAuthBody,
+  loginBody,
+  patchMeBody,
+  refreshBody,
+  registerBody,
+  sendVerificationBody,
+  verifyCodeBody,
+} from '../validation/schemas.js';
 import { issueTokens, revokeRefreshToken, rotateRefreshToken } from '../services/tokens.js';
 import { createDefaultSpaces } from '../services/spaces.js';
 import { serializeUser } from '../services/serializers.js';
@@ -21,11 +30,69 @@ export function authRouter({ config, hub, email }) {
       const { email: userEmail, password, name, timezone } = req.body;
       if (await User.exists({ email: userEmail })) throw conflict('Email is already registered');
       const passwordHash = await bcrypt.hash(password, config.bcryptCost);
-      const user = await User.create({ email: userEmail, name, passwordHash, timezone: timezone ?? 'UTC' });
+      const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+      const verificationCodeExpiresAt = new Date(Date.now() + 24 * 3600 * 1000);
+      const user = await User.create({
+        email: userEmail,
+        name,
+        passwordHash,
+        timezone: timezone ?? 'UTC',
+        isVerified: false,
+        verificationCode,
+        verificationCodeExpiresAt,
+      });
       await createDefaultSpaces(user._id);
-      email?.sendWelcomeEmail({ email: user.email, name: user.name }).catch(() => {});
+      email?.sendVerificationEmail({ email: user.email, name: user.name, code: verificationCode }).catch(() => {});
       const tokens = await issueTokens(config, user._id);
-      res.status(201).json({ user: serializeUser(user), ...tokens });
+      res.status(201).json({ user: serializeUser(user), ...tokens, verificationSent: Boolean(config.email?.enabled) });
+    }),
+  );
+
+  r.post(
+    '/auth/send-verification',
+    validate({ body: sendVerificationBody }),
+    asyncHandler(async (req, res) => {
+      const user = await User.findOne({ email: req.body.email });
+      if (!user) {
+        return res.json({ ok: true, sent: false, message: 'If an account exists, a verification code was sent.' });
+      }
+      if (user.isVerified) {
+        return res.json({ ok: true, sent: false, alreadyVerified: true, message: 'Email is already verified.' });
+      }
+      const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+      user.verificationCode = verificationCode;
+      user.verificationCodeExpiresAt = new Date(Date.now() + 24 * 3600 * 1000);
+      await user.save();
+      const result = await email?.sendVerificationEmail({
+        email: user.email,
+        name: user.name,
+        code: verificationCode,
+      });
+      res.json({ ok: true, sent: Boolean(result?.sent), message: 'Verification code sent.' });
+    }),
+  );
+
+  r.post(
+    '/auth/verify-code',
+    validate({ body: verifyCodeBody }),
+    asyncHandler(async (req, res) => {
+      const user = await User.findOne({ email: req.body.email });
+      if (!user) throw notFound('User not found');
+      if (user.isVerified) {
+        return res.json({ ok: true, verified: true, user: serializeUser(user) });
+      }
+      if (!user.verificationCode || user.verificationCode !== req.body.code.trim()) {
+        throw badRequest('Invalid verification code');
+      }
+      if (user.verificationCodeExpiresAt && new Date() > user.verificationCodeExpiresAt) {
+        throw badRequest('Verification code has expired. Please request a new one.');
+      }
+      user.isVerified = true;
+      user.verificationCode = null;
+      user.verificationCodeExpiresAt = null;
+      await user.save();
+      email?.sendWelcomeEmail({ email: user.email, name: user.name }).catch(() => {});
+      res.json({ ok: true, verified: true, user: serializeUser(user) });
     }),
   );
 
@@ -79,6 +146,7 @@ export function authRouter({ config, hub, email }) {
           googleId: profile.sub,
           picture: profile.picture || null,
           timezone: 'UTC',
+          isVerified: true,
         });
         await createDefaultSpaces(user._id);
         email?.sendWelcomeEmail({ email: user.email, name: user.name }).catch(() => {});

@@ -1,24 +1,44 @@
 import 'thread.dart';
 
 class UserProfile {
-  const UserProfile({required this.id, required this.email, required this.name, required this.timezone});
+  const UserProfile({
+    required this.id,
+    required this.email,
+    required this.name,
+    required this.timezone,
+    this.isVerified = false,
+  });
 
   final String id;
   final String email;
   final String name;
   final String timezone;
+  final bool isVerified;
 
   factory UserProfile.fromJson(Map<String, dynamic> j) => UserProfile(
         id: (j['id'] as String?) ?? '',
         email: (j['email'] as String?) ?? '',
         name: (j['name'] as String?) ?? '',
         timezone: (j['timezone'] as String?) ?? 'UTC',
+        isVerified: j['isVerified'] == true,
       );
 
-  Map<String, dynamic> toJson() => {'id': id, 'email': email, 'name': name, 'timezone': timezone};
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'email': email,
+        'name': name,
+        'timezone': timezone,
+        'isVerified': isVerified,
+      };
 
-  UserProfile copyWith({String? name, String? timezone}) =>
-      UserProfile(id: id, email: email, name: name ?? this.name, timezone: timezone ?? this.timezone);
+  UserProfile copyWith({String? name, String? timezone, bool? isVerified}) =>
+      UserProfile(
+        id: id,
+        email: email,
+        name: name ?? this.name,
+        timezone: timezone ?? this.timezone,
+        isVerified: isVerified ?? this.isVerified,
+      );
 }
 
 enum ActivityKind { created, updated, status, reminder, linked, deleted }

@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../models/misc.dart';
 import '../models/space.dart';
 import '../state/app_state.dart';
+import 'shell.dart';
 import 'theme.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -21,7 +22,39 @@ class SettingsScreen extends StatelessWidget {
       child: ListView(padding: const EdgeInsets.fromLTRB(16, 12, 16, 100), children: [
         const Text('Settings', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
         head('Account'),
-        Card(child: ListTile(leading: const Icon(Icons.person_outline), title: Text(s.user?.name ?? ''), subtitle: Text(s.user?.email ?? ''), trailing: IconButton(tooltip: 'Edit name', icon: const Icon(Icons.edit_outlined), onPressed: () => _editName(context, s)))),
+        Card(
+          child: Column(
+            children: [
+              ListTile(
+                leading: const Icon(Icons.person_outline),
+                title: Row(
+                  children: [
+                    Flexible(child: Text(s.user?.name ?? '', overflow: TextOverflow.ellipsis)),
+                    const SizedBox(width: 8),
+                    if (s.user?.isVerified == true)
+                      const Tooltip(message: 'Verified Email', child: Icon(Icons.verified, color: kBlue, size: 16))
+                    else
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(color: kCrimson.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(4)),
+                        child: const Text('UNVERIFIED', style: TextStyle(color: kCrimson, fontSize: 10, fontWeight: FontWeight.bold)),
+                      ),
+                  ],
+                ),
+                subtitle: Text(s.user?.email ?? ''),
+                trailing: IconButton(tooltip: 'Edit name', icon: const Icon(Icons.edit_outlined), onPressed: () => _editName(context, s)),
+              ),
+              if (s.user != null && !s.user!.isVerified)
+                ListTile(
+                  dense: true,
+                  leading: const Icon(Icons.mark_email_unread_outlined, color: kCrimson, size: 20),
+                  title: const Text('Verify Email Address', style: TextStyle(color: kBlue, fontWeight: FontWeight.w600)),
+                  trailing: const Icon(Icons.chevron_right, size: 20, color: kBlue),
+                  onTap: () => showEmailVerificationDialog(context),
+                ),
+            ],
+          ),
+        ),
         head('Appearance'),
         SegmentedButton<ThemeModeSetting>(
           segments: const [ButtonSegment(value: ThemeModeSetting.system, label: Text('System')), ButtonSegment(value: ThemeModeSetting.light, label: Text('Light')), ButtonSegment(value: ThemeModeSetting.dark, label: Text('Dark'))],

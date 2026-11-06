@@ -53,6 +53,56 @@ export function createEmailService({ config, logger = console }) {
     }
   }
 
+  async function sendVerificationEmail({ email, name, code }) {
+    const displayName = name?.trim() || 'Spider-Friend';
+    const subject = `🕸️ Verify Your Spider Mind Email: ${code}`;
+
+    const htmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #03040A; color: #FFFFFF; margin: 0; padding: 24px; }
+    .card { max-width: 520px; margin: 0 auto; background: #0B0F1E; border: 1px solid rgba(50, 180, 255, 0.25); border-radius: 20px; padding: 36px 28px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5); }
+    .header { text-align: center; margin-bottom: 24px; }
+    .badge { display: inline-block; background: rgba(255, 42, 68, 0.15); color: #FF2A44; border: 1px solid rgba(255, 42, 68, 0.4); border-radius: 9999px; padding: 6px 18px; font-weight: 800; font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px; }
+    h1 { color: #FFFFFF; font-size: 24px; margin: 18px 0 8px; font-weight: 800; letter-spacing: -0.5px; }
+    p { color: #A0AEC0; font-size: 15px; line-height: 1.6; margin: 8px 0; }
+    .code-container { background: rgba(255, 255, 255, 0.03); border: 2px dashed rgba(50, 180, 255, 0.5); border-radius: 14px; padding: 20px; text-align: center; margin: 28px 0; }
+    .code-label { font-size: 12px; color: #718096; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px; }
+    .code { font-size: 36px; font-weight: 900; letter-spacing: 8px; color: #32B4FF; font-family: monospace; }
+    .footer { text-align: center; margin-top: 28px; font-size: 12px; color: #718096; border-top: 1px solid rgba(255, 255, 255, 0.06); padding-top: 20px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="header">
+      <div class="badge">Spider Mind Verification</div>
+      <h1>Verify Your Email</h1>
+      <p>Hey ${displayName}, enter this 6-digit code in the app to activate your 3D Mind Web account.</p>
+    </div>
+    <div class="code-container">
+      <div class="code-label">Your Security Code</div>
+      <div class="code">${code}</div>
+    </div>
+    <p style="font-size: 13px; color: #718096; text-align: center;">This code expires in 24 hours. If you didn't create a Spider Mind account, you can safely ignore this email.</p>
+    <div class="footer">
+      © ${new Date().getFullYear()} Spider Mind. Built for deep focus and superhuman execution.
+    </div>
+  </div>
+</body>
+</html>
+    `.trim();
+
+    return sendEmail({
+      to: email,
+      subject,
+      htmlContent,
+      textContent: `Hey ${displayName},\n\nYour Spider Mind verification code is: ${code}\n\nEnter this code in the app to activate your account.\n\nCode expires in 24 hours.`,
+    });
+  }
+
   async function sendWelcomeEmail({ email, name }) {
     const displayName = name?.trim() || 'Spider-Friend';
     const subject = `Welcome to Spider Mind, ${displayName}! 🕸️`;
@@ -149,6 +199,7 @@ export function createEmailService({ config, logger = console }) {
   return {
     isConfigured,
     sendEmail,
+    sendVerificationEmail,
     sendWelcomeEmail,
     sendReminderEmail,
   };

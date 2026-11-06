@@ -340,6 +340,43 @@ class AppState extends ChangeNotifier {
     return false;
   }
 
+  Future<bool> verifyCode({required String email, required String code}) async {
+    _busy = true;
+    _authError = null;
+    notifyListeners();
+    try {
+      final res = await _api.call('POST', '/auth/verify-code', body: {
+        'email': email.trim(),
+        'code': code.trim(),
+      }, auth: false) as Map<String, dynamic>;
+      if (res['verified'] == true) {
+        if (_user != null) {
+          _user = _user!.copyWith(isVerified: true);
+          await _store.saveUser(_user!);
+        }
+        _busy = false;
+        notifyListeners();
+        return true;
+      }
+    } on ApiException catch (e) {
+      _authError = e.message;
+    } catch (_) {
+      _authError = 'Verification failed. Please check the code and try again.';
+    }
+    _busy = false;
+    notifyListeners();
+    return false;
+  }
+
+  Future<bool> resendVerification(String email) async {
+    try {
+      await _api.call('POST', '/auth/send-verification', body: {'email': email.trim()}, auth: false);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<void> signOut() async {
     final r = _api.refresh;
     if (r != null) {
