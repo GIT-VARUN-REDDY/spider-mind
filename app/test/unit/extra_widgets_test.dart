@@ -6,6 +6,7 @@ import 'package:spider_mind/models/space.dart';
 import 'package:spider_mind/models/thread.dart';
 import 'package:spider_mind/state/app_state.dart';
 import 'package:spider_mind/ui/editor.dart';
+import 'package:spider_mind/ui/shell.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -88,5 +89,58 @@ void main() {
       await tester.tap(saveButton);
       await tester.pumpAndSettle();
     }
+  });
+
+  testWidgets('WebTab opens Future Scrubber and scrubs forward in time', (tester) async {
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    final state = AppState.test(
+      auth: AuthStatus.signedIn,
+      spaces: [space1],
+      threads: [
+        thread1,
+        Thread(
+          id: 't2',
+          title: 'Review Bottleneck',
+          spaceId: 's1',
+          type: ThreadType.task,
+          status: ThreadStatus.todo,
+          priority: Priority.high,
+          dueAt: DateTime.now().toUtc().add(const Duration(days: 3)),
+          createdAt: DateTime.now().toUtc(),
+          updatedAt: DateTime.now().toUtc(),
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      makeTestable(
+        const WebTab(),
+        state,
+      ),
+    );
+    await tester.pump();
+
+    // Tapping the hourglass icon in WebTab header opens the scrubber dock
+    final scrubberBtn = find.byTooltip('Future Scrubber (Time Travel)');
+    expect(scrubberBtn, findsOneWidget);
+    await tester.tap(scrubberBtn);
+    await tester.pump();
+
+    // Verify scrubber dock is rendered
+    expect(find.text('TIME TRAVEL: REAL TIME'), findsOneWidget);
+    expect(find.text('+3d'), findsOneWidget);
+
+    // Tap +3d preset
+    await tester.tap(find.text('+3d'));
+    await tester.pump();
+
+    // Should now simulate +3.0d
+    expect(find.textContaining('SIMULATING: +3.0d'), findsOneWidget);
   });
 }

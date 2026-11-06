@@ -3,9 +3,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../features/web3d/web_layout.dart';
 import '../features/web3d/web_legend.dart';
 import '../features/web3d/web_view_3d.dart';
 import '../models/thread.dart';
+import '../models/urgency.dart';
 import '../state/app_state.dart';
 import 'editor.dart';
 import 'insights_screen.dart';
@@ -1158,11 +1160,37 @@ class _WebTabState extends State<WebTab> {
   final Set<String> _hidden = {};
   bool _search = false;
   String _kw = '';
+  bool _timeTravelOpen = false;
+  double _timeTravelDays = 0.0;
+  bool _isPlaying = false;
+  Timer? _playTimer;
 
   @override
   void dispose() {
+    _playTimer?.cancel();
     _ctl.dispose();
     super.dispose();
+  }
+
+  void _togglePlay() {
+    setState(() {
+      _isPlaying = !_isPlaying;
+      if (_isPlaying) {
+        _playTimer?.cancel();
+        _playTimer = Timer.periodic(const Duration(milliseconds: 100), (_) {
+          if (!mounted) return;
+          setState(() {
+            _timeTravelDays += 0.25;
+            if (_timeTravelDays > 30.0) {
+              _timeTravelDays = 0.0;
+            }
+          });
+        });
+      } else {
+        _playTimer?.cancel();
+        _playTimer = null;
+      }
+    });
   }
 
   @override
@@ -1170,6 +1198,22 @@ class _WebTabState extends State<WebTab> {
     final s = context.watch<AppState>();
     final selected = _selected == null ? null : s.threadById(_selected!);
     final dark = Theme.of(context).brightness == Brightness.dark;
+
+    final timeTravelOffset = Duration(minutes: (_timeTravelDays * 24 * 60).round());
+    final simulatedNow = DateTime.now().add(timeTravelOffset);
+    final simulatedLayout = WebLayout.compute(
+      threads: s.threads,
+      spaces: s.spaces,
+      now: simulatedNow,
+      showDone: s.settings.showDone,
+      hiddenSpaceIds: Set.of(_hidden),
+    );
+    final bottleneckCount = s.threads.where((t) {
+      if (t.isDone) return false;
+      final node = simulatedLayout.nodes[t.id];
+      return node != null && node.band == UrgencyBand.now;
+    }).length;
+
     return Container(
       decoration: BoxDecoration(
         gradient: RadialGradient(
@@ -1189,6 +1233,14 @@ class _WebTabState extends State<WebTab> {
                   const SizedBox(width: 10),
                   _LinkPill(s),
                   const Spacer(),
+                  IconButton(
+                    tooltip: 'Future Scrubber (Time Travel)',
+                    icon: Icon(
+                      _timeTravelDays > 0 ? Icons.hourglass_top_rounded : Icons.hourglass_bottom_rounded,
+                      color: _timeTravelDays > 0 ? kCrimson : (_timeTravelOpen ? kBlue : null),
+                    ),
+                    onPressed: () => setState(() => _timeTravelOpen = !_timeTravelOpen),
+                  ),
                   IconButton(tooltip: 'Search by keyword', icon: Icon(_search ? Icons.search_off : Icons.search), onPressed: () => setState(() { _search = !_search; _kw = ''; })),
                   IconButton(tooltip: 'What do the shapes mean?', icon: const Icon(Icons.info_outline), onPressed: () => showWebLegend(context)),
                   IconButton(tooltip: 'Fit everything', icon: const Icon(Icons.center_focus_strong_outlined), onPressed: _ctl.resetView),
@@ -1232,6 +1284,7 @@ class _WebTabState extends State<WebTab> {
               highlightKeyword: _search && _kw.trim().isNotEmpty ? _kw.trim() : null,
               reduceMotion: s.settings.reduceMotion,
               lowGraphics: s.settings.lowGraphics,
+              timeTravelOffset: timeTravelOffset,
               onSelect: (id) => setState(() => _selected = id),
             ),
           ),
@@ -1253,16 +1306,255 @@ class _WebTabState extends State<WebTab> {
         ),
       Positioned(
         right: 12,
-        bottom: selected == null ? 90 : 190,
+        bottom: selected != null
+            ? 200
+            : (_timeTravelOpen || _timeTravelDays > 0 ? 190 : 90),
         child: Column(children: [
           IconButton.filledTonal(tooltip: 'Zoom in', icon: const Icon(Icons.add), onPressed: () => _ctl.zoomBy(1.4)),
           const SizedBox(height: 6),
           IconButton.filledTonal(tooltip: 'Zoom out', icon: const Icon(Icons.remove), onPressed: () => _ctl.zoomBy(1 / 1.4)),
         ]),
       ),
-        if (selected != null)
-          Positioned(left: 12, right: 12, bottom: 84, child: _SelectedCard(thread: selected, onFocus: () => _ctl.focusOn(selected.id), onClose: () => setState(() => _selected = null))),
+      if (_timeTravelOpen || _timeTravelDays > 0)
+        Positioned(
+          left: 14,
+          right: 14,
+          bottom: selected == null ? 84 : 194,
+          child: _FutureScrubberDock(
+            days: _timeTravelDays,
+            isPlaying: _isPlaying,
+            bottleneckCount: bottleneckCount,
+            simulatedDate: simulatedNow,
+            onChanged: (v) => setState(() => _timeTravelDays = v),
+            onTogglePlay: _togglePlay,
+            onReset: () => setState(() {
+              _timeTravelDays = 0.0;
+              _isPlaying = false;
+              _playTimer?.cancel();
+            }),
+            onClose: () => setState(() {
+              _timeTravelOpen = false;
+              _timeTravelDays = 0.0;
+              _isPlaying = false;
+              _playTimer?.cancel();
+            }),
+          ),
+        ),
+      if (selected != null)
+        Positioned(left: 12, right: 12, bottom: 84, child: _SelectedCard(thread: selected, onFocus: () => _ctl.focusOn(selected.id), onClose: () => setState(() => _selected = null))),
       ]),
+    );
+  }
+}
+
+class _FutureScrubberDock extends StatelessWidget {
+  const _FutureScrubberDock({
+    required this.days,
+    required this.isPlaying,
+    required this.bottleneckCount,
+    required this.simulatedDate,
+    required this.onChanged,
+    required this.onTogglePlay,
+    required this.onReset,
+    required this.onClose,
+  });
+
+  final double days;
+  final bool isPlaying;
+  final int bottleneckCount;
+  final DateTime simulatedDate;
+  final ValueChanged<double> onChanged;
+  final VoidCallback onTogglePlay;
+  final VoidCallback onReset;
+  final VoidCallback onClose;
+
+  String _formatDate(DateTime dt) {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    final w = weekdays[dt.weekday - 1];
+    final m = months[dt.month - 1];
+    return '$w, $m ${dt.day}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isCrunch = bottleneckCount >= 3;
+    final isNow = days <= 0.05;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xF0080C1A),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isCrunch ? kCrimson.withValues(alpha: 0.8) : const Color(0x5532B4FF),
+          width: isCrunch ? 1.8 : 1.2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: isCrunch ? kCrimson.withValues(alpha: 0.35) : Colors.black.withValues(alpha: 0.6),
+            blurRadius: isCrunch ? 28 : 20,
+            spreadRadius: isCrunch ? 2 : 0,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: isCrunch ? kCrimson.withValues(alpha: 0.2) : kBlue.withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  isCrunch ? Icons.warning_amber_rounded : Icons.hourglass_top_rounded,
+                  color: isCrunch ? kCrimson : kBlue,
+                  size: 16,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      isNow
+                          ? 'TIME TRAVEL: REAL TIME'
+                          : 'SIMULATING: +${days.toStringAsFixed(1)}d (${_formatDate(simulatedDate)})',
+                      style: TextStyle(
+                        color: isNow ? Colors.white.withValues(alpha: 0.7) : (isCrunch ? kCrimson : kBlue),
+                        fontWeight: FontWeight.w800,
+                        fontSize: 11,
+                        letterSpacing: 1.1,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      isCrunch
+                          ? '🚨 CRUNCH: $bottleneckCount threads converging on NOW'
+                          : (isNow
+                              ? '$bottleneckCount thread(s) currently at NOW ring'
+                              : '$bottleneckCount thread(s) in NOW ring on this date'),
+                      style: TextStyle(
+                        color: isCrunch ? const Color(0xFFFF8595) : Colors.white.withValues(alpha: 0.85),
+                        fontSize: 12,
+                        fontWeight: isCrunch ? FontWeight.w700 : FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (!isNow)
+                TextButton(
+                  onPressed: onReset,
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  child: const Text('Reset', style: TextStyle(color: kBlue, fontSize: 12, fontWeight: FontWeight.bold)),
+                ),
+              IconButton(
+                icon: const Icon(Icons.close, size: 18),
+                color: Colors.white.withValues(alpha: 0.6),
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                onPressed: onClose,
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              IconButton(
+                tooltip: isPlaying ? 'Pause Simulation' : 'Play Time-Travel',
+                icon: Icon(
+                  isPlaying ? Icons.pause_circle_filled_rounded : Icons.play_circle_fill_rounded,
+                  color: isPlaying ? kCrimson : kBlue,
+                  size: 30,
+                ),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                onPressed: onTogglePlay,
+              ),
+              Expanded(
+                child: SliderTheme(
+                  data: SliderThemeData(
+                    activeTrackColor: isCrunch ? kCrimson : kBlue,
+                    inactiveTrackColor: Colors.white.withValues(alpha: 0.15),
+                    thumbColor: isCrunch ? kCrimson : Colors.white,
+                    overlayColor: (isCrunch ? kCrimson : kBlue).withValues(alpha: 0.2),
+                    trackHeight: 3.5,
+                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
+                  ),
+                  child: Slider(
+                    value: days.clamp(0.0, 30.0),
+                    min: 0.0,
+                    max: 30.0,
+                    onChanged: onChanged,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _PresetChip(label: 'NOW', selected: isNow, onTap: () => onChanged(0.0)),
+                _PresetChip(label: '+1d', selected: (days - 1.0).abs() < 0.3, onTap: () => onChanged(1.0)),
+                _PresetChip(label: '+3d', selected: (days - 3.0).abs() < 0.3, onTap: () => onChanged(3.0)),
+                _PresetChip(label: '+1w', selected: (days - 7.0).abs() < 0.5, onTap: () => onChanged(7.0)),
+                _PresetChip(label: '+2w', selected: (days - 14.0).abs() < 0.5, onTap: () => onChanged(14.0)),
+                _PresetChip(label: '+1m', selected: (days - 30.0).abs() < 0.5, onTap: () => onChanged(30.0)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PresetChip extends StatelessWidget {
+  const _PresetChip({required this.label, required this.selected, required this.onTap});
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 6),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: selected ? kBlue.withValues(alpha: 0.3) : Colors.white.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: selected ? kBlue : Colors.white.withValues(alpha: 0.12),
+              width: 1,
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: selected ? Colors.white : Colors.white.withValues(alpha: 0.7),
+              fontSize: 11,
+              fontWeight: selected ? FontWeight.bold : FontWeight.w500,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

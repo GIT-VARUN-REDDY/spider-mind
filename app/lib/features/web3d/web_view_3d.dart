@@ -4,6 +4,7 @@ import 'package:flutter/scheduler.dart';
 
 import '../../models/space.dart';
 import '../../models/thread.dart';
+import '../../models/urgency.dart';
 import 'web_camera.dart';
 import 'web_edges.dart';
 import 'web_layout.dart';
@@ -36,6 +37,7 @@ class WebView3D extends StatefulWidget {
     this.highlightKeyword,
     this.reduceMotion = false,
     this.lowGraphics = false,
+    this.timeTravelOffset = Duration.zero,
   });
 
   final List<Thread> threads;
@@ -49,6 +51,7 @@ class WebView3D extends StatefulWidget {
   final String? highlightKeyword;
   final bool reduceMotion;
   final bool lowGraphics;
+  final Duration timeTravelOffset;
 
   @override
   State<WebView3D> createState() => _WebView3DState();
@@ -62,6 +65,7 @@ class _WebView3DState extends State<WebView3D> with SingleTickerProviderStateMix
   late WebPainter _painter;
   Duration _last = Duration.zero;
   bool _hasFit = false;
+  bool _isAnimatingNodes = false;
   double _lastScale = 1;
   double _lastRotation = 0;
   Offset? _lastTouchPos;
@@ -83,10 +87,12 @@ class _WebView3DState extends State<WebView3D> with SingleTickerProviderStateMix
       old.controller._detach(this);
       widget.controller._attach(this);
     }
+    final timeShifted = old.timeTravelOffset != widget.timeTravelOffset;
     final structural = !identical(old.threads, widget.threads) ||
         !identical(old.spaces, widget.spaces) ||
         old.showDone != widget.showDone ||
-        old.hiddenSpaceIds != widget.hiddenSpaceIds;
+        old.hiddenSpaceIds != widget.hiddenSpaceIds ||
+        timeShifted;
     if (structural) _rebuildLayout();
     for (final id in widget.flashIds) {
       if (!old.flashIds.contains(id)) _scene.flashStart[id] = _scene.time;
@@ -115,17 +121,25 @@ class _WebView3DState extends State<WebView3D> with SingleTickerProviderStateMix
   }
 
   void _rebuildLayout() {
-    final now = DateTime.now();
+    final simulatedNow = DateTime.now().add(widget.timeTravelOffset);
     final layout = WebLayout.compute(
       threads: widget.threads,
       spaces: widget.spaces,
-      now: now,
+      now: simulatedNow,
       showDone: widget.showDone,
       hiddenSpaceIds: widget.hiddenSpaceIds,
     );
+    final bottleneckCount = widget.threads.where((t) {
+      if (t.isDone) return false;
+      final node = layout.nodes[t.id];
+      return node != null && node.band == UrgencyBand.now;
+    }).length;
+
     _scene
       ..layout = layout
-      ..now = now
+      ..now = simulatedNow
+      ..timeTravelOffset = widget.timeTravelOffset
+      ..bottleneckCount = bottleneckCount
       ..byId = {for (final t in widget.threads) t.id: t}
       ..edges = buildWebEdges(widget.threads.where((t) => layout.nodes.containsKey(t.id)).toList());
     _syncScene();
@@ -161,9 +175,34 @@ class _WebView3DState extends State<WebView3D> with SingleTickerProviderStateMix
     _kick();
   }
 
+  bool _stepNodePositions(double dt) {
+    var stillMoving = false;
+    final k = widget.reduceMotion ? 1.0 : (dt * 10.0).clamp(0.04, 1.0);
+    final targetNodes = _scene.layout.nodes;
+    for (final entry in targetNodes.entries) {
+      final id = entry.key;
+      final target = entry.value.position;
+      final current = _scene.animatedPositions[id];
+      if (current == null) {
+        _scene.animatedPositions[id] = target;
+      } else {
+        final dist = (target - current).length;
+        if (dist > 0.005) {
+          _scene.animatedPositions[id] = Vec3.lerp(current, target, k);
+          stillMoving = true;
+        } else {
+          _scene.animatedPositions[id] = target;
+        }
+      }
+    }
+    _scene.animatedPositions.removeWhere((id, _) => !targetNodes.containsKey(id));
+    return stillMoving;
+  }
+
   bool get _needsAnimation {
     if (_cam.isMoving) return true;
     if (_painter.isAnimatingLabels) return true;
+    if (_isAnimatingNodes) return true;
     if (widget.reduceMotion) return _scene.flashStart.isNotEmpty;
     return true;
   }
@@ -182,6 +221,7 @@ class _WebView3DState extends State<WebView3D> with SingleTickerProviderStateMix
     _last = t;
     _scene.time += dt;
     _cam.step(dt);
+    _isAnimatingNodes = _stepNodePositions(dt);
     _scene.flashStart.removeWhere((_, s) => _scene.time - s > 2.6);
     _frame.value++;
     if (!_needsAnimation) _ticker.stop();

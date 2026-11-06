@@ -21,6 +21,9 @@ class WebScene {
   Map<String, double> flashStart = {}; // thread id -> scene time it started
   double time = 0;
   DateTime now = DateTime.now();
+  Map<String, Vec3> animatedPositions = {};
+  Duration timeTravelOffset = Duration.zero;
+  int bottleneckCount = 0;
   bool dark = true;
   bool reduceMotion = false;
   bool lowGraphics = false;
@@ -193,6 +196,17 @@ class WebPainter extends CustomPainter {
           ..strokeWidth = isNow ? 1.4 : 1
           ..color = (isNow ? kCrimson : ink).withValues(alpha: isNow ? 0.35 : 0.10),
       );
+      if (isNow && scene.bottleneckCount >= 3) {
+        final pulse = scene.reduceMotion ? 0.5 : (0.5 + 0.5 * math.sin(scene.time * 5.0));
+        canvas.drawPath(
+          path,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 3.5 + 2.5 * pulse
+            ..color = kCrimson.withValues(alpha: (0.35 + 0.30 * pulse))
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5),
+        );
+      }
     }
 
     // Ring labels: side-by-side across different orbits without coincidence.
@@ -290,7 +304,8 @@ class WebPainter extends CustomPainter {
       if (na == null || nb == null) continue;
       final touches = selected != null && (e.a == selected || e.b == selected);
       final dim = selected != null && !touches;
-      final pa = na.position, pb = nb.position;
+      final pa = scene.animatedPositions[e.a] ?? na.position;
+      final pb = scene.animatedPositions[e.b] ?? nb.position;
       final oa = _p(pa.x, pa.y, pa.z), ob = _p(pb.x, pb.y, pb.z);
       final ca = layout.spokes[na.spokeIndex].color, cb = layout.spokes[nb.spokeIndex].color;
       final col = Color.lerp(ca, cb, 0.5)!;
@@ -330,7 +345,8 @@ class WebPainter extends CustomPainter {
     final order = layout.nodes.values.toList();
     final projected = <String, ProjectedPoint>{};
     for (final n in order) {
-      projected[n.id] = camera.project(n.position.x, n.position.y, n.position.z);
+      final pos = scene.animatedPositions[n.id] ?? n.position;
+      projected[n.id] = camera.project(pos.x, pos.y, pos.z);
     }
     order.sort((a, b) => projected[b.id]!.depth.compareTo(projected[a.id]!.depth));
 
@@ -475,7 +491,8 @@ class WebPainter extends CustomPainter {
     var bestD = maxDist;
     var bestDepth = double.infinity;
     for (final n in scene.layout.nodes.values) {
-      final p = camera.project(n.position.x, n.position.y, n.position.z);
+      final worldPos = scene.animatedPositions[n.id] ?? n.position;
+      final p = camera.project(worldPos.x, worldPos.y, worldPos.z);
       if (!p.visible) continue;
       final d = (Offset(p.x, p.y) - pos).distance;
       if (d < bestD - 1 || (d <= bestD + 1 && p.depth < bestDepth && best != null)) {
