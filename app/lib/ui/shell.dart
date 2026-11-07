@@ -1245,88 +1245,119 @@ class _WebTabState extends State<WebTab> {
                 padding: const EdgeInsets.fromLTRB(16, 8, 8, 0),
                 child: Row(children: [
                   const Text('Your web', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: 8),
                   _LinkPill(s),
-                  const Spacer(),
-                  IconButton(
-                    tooltip: 'Cinematic Voice-to-Web',
-                    icon: const Icon(
-                      Icons.mic_none_rounded,
-                      color: Color(0xFFD946EF),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      reverse: true,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            visualDensity: VisualDensity.compact,
+                            tooltip: 'Cinematic Voice-to-Web',
+                            icon: const Icon(
+                              Icons.mic_none_rounded,
+                              color: Color(0xFFD946EF),
+                            ),
+                            onPressed: () {
+                              HapticFeedback.mediumImpact();
+                              showVoiceToWebModal(
+                                context,
+                                onThreadCreated: (threadId) {
+                                  _ctl.focusOn(threadId);
+                                },
+                              );
+                            },
+                          ),
+                          IconButton(
+                            visualDensity: VisualDensity.compact,
+                            tooltip: 'Slingshot Quick-Capture',
+                            icon: Icon(
+                              Icons.gps_fixed,
+                              color: _slingshotActive ? const Color(0xFF00FF88) : null,
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                _slingshotActive = !_slingshotActive;
+                                if (_slingshotActive) {
+                                  _timeTravelOpen = false;
+                                  _radarActive = false;
+                                  HapticFeedback.mediumImpact();
+                                }
+                              });
+                            },
+                          ),
+                          IconButton(
+                            visualDensity: VisualDensity.compact,
+                            tooltip: 'Spider Radar Focus Mode',
+                            icon: Icon(
+                              Icons.radar,
+                              color: _radarActive ? const Color(0xFF00F5FF) : null,
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                _radarActive = !_radarActive;
+                                if (_radarActive) {
+                                  _timeTravelOpen = false;
+                                  _slingshotActive = false;
+                                  final moves = s.nextMoves(limit: 5);
+                                  if (moves.isNotEmpty) {
+                                    _radarTargetIndex = 0;
+                                    _ctl.focusOn(moves[0].thread.id);
+                                    HapticFeedback.mediumImpact();
+                                  } else {
+                                    _radarActive = false;
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('No active tasks to focus on! Add tasks to engage Spider Radar.')),
+                                    );
+                                  }
+                                }
+                              });
+                            },
+                          ),
+                          IconButton(
+                            visualDensity: VisualDensity.compact,
+                            tooltip: 'Constellation Membranes (Project Sails)',
+                            icon: Icon(
+                              _showMembranes ? Icons.auto_awesome : Icons.auto_awesome_outlined,
+                              color: _showMembranes ? kBlue : null,
+                            ),
+                            onPressed: () => setState(() => _showMembranes = !_showMembranes),
+                          ),
+                          IconButton(
+                            visualDensity: VisualDensity.compact,
+                            tooltip: 'Future Scrubber (Time Travel)',
+                            icon: Icon(
+                              _timeTravelDays > 0 ? Icons.hourglass_top_rounded : Icons.hourglass_bottom_rounded,
+                              color: _timeTravelDays > 0 ? kCrimson : (_timeTravelOpen ? kBlue : null),
+                            ),
+                            onPressed: () => setState(() => _timeTravelOpen = !_timeTravelOpen),
+                          ),
+                          IconButton(
+                            visualDensity: VisualDensity.compact,
+                            tooltip: 'Search by keyword',
+                            icon: Icon(_search ? Icons.search_off : Icons.search),
+                            onPressed: () => setState(() { _search = !_search; _kw = ''; }),
+                          ),
+                          IconButton(
+                            visualDensity: VisualDensity.compact,
+                            tooltip: 'What do the shapes mean?',
+                            icon: const Icon(Icons.info_outline),
+                            onPressed: () => showWebLegend(context),
+                          ),
+                          IconButton(
+                            visualDensity: VisualDensity.compact,
+                            tooltip: 'Fit everything',
+                            icon: const Icon(Icons.center_focus_strong_outlined),
+                            onPressed: _ctl.resetView,
+                          ),
+                        ],
+                      ),
                     ),
-                    onPressed: () {
-                      HapticFeedback.mediumImpact();
-                      showVoiceToWebModal(
-                        context,
-                        onThreadCreated: (threadId) {
-                          _ctl.focusOn(threadId);
-                        },
-                      );
-                    },
                   ),
-                  IconButton(
-                    tooltip: 'Slingshot Quick-Capture',
-                    icon: Icon(
-                      Icons.gps_fixed,
-                      color: _slingshotActive ? const Color(0xFF00FF88) : null,
-                    ),
-                    onPressed: () {
-                      setState(() {
-                        _slingshotActive = !_slingshotActive;
-                        if (_slingshotActive) {
-                          _timeTravelOpen = false;
-                          _radarActive = false;
-                          HapticFeedback.mediumImpact();
-                        }
-                      });
-                    },
-                  ),
-                  IconButton(
-                    tooltip: 'Spider Radar Focus Mode',
-                    icon: Icon(
-                      Icons.radar,
-                      color: _radarActive ? const Color(0xFF00F5FF) : null,
-                    ),
-                    onPressed: () {
-                      setState(() {
-                        _radarActive = !_radarActive;
-                        if (_radarActive) {
-                          _timeTravelOpen = false;
-                          _slingshotActive = false;
-                          final moves = s.nextMoves(limit: 5);
-                          if (moves.isNotEmpty) {
-                            _radarTargetIndex = 0;
-                            _ctl.focusOn(moves[0].thread.id);
-                            HapticFeedback.mediumImpact();
-                          } else {
-                            _radarActive = false;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('No active tasks to focus on! Add tasks to engage Spider Radar.')),
-                            );
-                          }
-                        }
-                      });
-                    },
-                  ),
-                  IconButton(
-                    tooltip: 'Constellation Membranes (Project Sails)',
-                    icon: Icon(
-                      _showMembranes ? Icons.auto_awesome : Icons.auto_awesome_outlined,
-                      color: _showMembranes ? kBlue : null,
-                    ),
-                    onPressed: () => setState(() => _showMembranes = !_showMembranes),
-                  ),
-                  IconButton(
-                    tooltip: 'Future Scrubber (Time Travel)',
-                    icon: Icon(
-                      _timeTravelDays > 0 ? Icons.hourglass_top_rounded : Icons.hourglass_bottom_rounded,
-                      color: _timeTravelDays > 0 ? kCrimson : (_timeTravelOpen ? kBlue : null),
-                    ),
-                    onPressed: () => setState(() => _timeTravelOpen = !_timeTravelOpen),
-                  ),
-                  IconButton(tooltip: 'Search by keyword', icon: Icon(_search ? Icons.search_off : Icons.search), onPressed: () => setState(() { _search = !_search; _kw = ''; })),
-                  IconButton(tooltip: 'What do the shapes mean?', icon: const Icon(Icons.info_outline), onPressed: () => showWebLegend(context)),
-                  IconButton(tooltip: 'Fit everything', icon: const Icon(Icons.center_focus_strong_outlined), onPressed: _ctl.resetView),
                 ]),
               ),
               if (_search)
