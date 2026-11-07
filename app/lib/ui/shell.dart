@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 
 import '../models/misc.dart';
 
+import '../features/voice/voice_hud.dart';
 import '../features/web3d/web_layout.dart';
 import '../features/web3d/web_legend.dart';
 import '../features/web3d/web_view_3d.dart';
@@ -1247,6 +1248,22 @@ class _WebTabState extends State<WebTab> {
                   const SizedBox(width: 10),
                   _LinkPill(s),
                   const Spacer(),
+                  IconButton(
+                    tooltip: 'Cinematic Voice-to-Web',
+                    icon: const Icon(
+                      Icons.mic_none_rounded,
+                      color: Color(0xFFD946EF),
+                    ),
+                    onPressed: () {
+                      HapticFeedback.mediumImpact();
+                      showVoiceToWebModal(
+                        context,
+                        onThreadCreated: (threadId) {
+                          _ctl.focusOn(threadId);
+                        },
+                      );
+                    },
+                  ),
                   IconButton(
                     tooltip: 'Slingshot Quick-Capture',
                     icon: Icon(

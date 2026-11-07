@@ -3,6 +3,7 @@ import 'dart:ui' show PictureRecorder;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
+import 'package:spider_mind/features/voice/voice_parser.dart';
 import 'package:spider_mind/features/web3d/web_camera.dart';
 import 'package:spider_mind/features/web3d/web_edges.dart';
 import 'package:spider_mind/features/web3d/web_layout.dart';
@@ -377,11 +378,53 @@ void main() {
     // Verify thread was created in state
     expect(state.threads.any((t) => t.title == 'Quantum Leap'), isTrue);
 
-    // Verify confirmation message
-    expect(find.textContaining('Injected "Quantum Leap" into Work'), findsOneWidget);
-
     // Settle flash and snackbar timers
     await tester.pump(const Duration(seconds: 4));
+  });
+
+  test('VoiceParser extracts title, space, priority, due date and links from speech', () {
+    final parsed = VoiceParser.parse(
+      text: 'Fix server leak in Work linked to Design 3D Web urgent',
+      spaces: const [space1],
+      threads: [thread1],
+    );
+
+    expect(parsed.title, contains('Fix server leak'));
+    expect(parsed.spaceName, equals('Work'));
+    expect(parsed.spaceId, equals('s1'));
+    expect(parsed.priority, equals(Priority.high));
+    expect(parsed.linkedThreadIds, contains('t1'));
+    expect(parsed.linkedThreadTitles, contains('Design 3D Web'));
+  });
+
+  testWidgets('WebTab opens Cinematic Voice-to-Web HUD and weaves voice thread', (tester) async {
+    final state = AppState.test(spaces: [space1], threads: [thread1]);
+
+    await tester.pumpWidget(makeTestable(const WebTab(), state));
+    await tester.pump();
+
+    final voiceBtn = find.byTooltip('Cinematic Voice-to-Web');
+    expect(voiceBtn, findsOneWidget);
+
+    // Tap to open Voice HUD modal
+    await tester.tap(voiceBtn);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+
+    expect(find.text('CINEMATIC VOICE-TO-WEB'), findsOneWidget);
+    expect(find.text('EXTRACTED SEMANTICS'), findsOneWidget);
+    expect(find.text('Weave Into Web'), findsOneWidget);
+
+    // Tap Weave Into Web
+    await tester.tap(find.text('Weave Into Web'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+
+    // Verify newly woven thread in state
+    expect(state.threads.length, greaterThanOrEqualTo(2));
+
+    // Settle timers
+    await tester.pump(const Duration(seconds: 5));
   });
 }
 

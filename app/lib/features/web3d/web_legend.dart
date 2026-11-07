@@ -64,6 +64,7 @@ class _Legend extends StatelessWidget {
             row(const Icon(Icons.auto_awesome, color: kBlue), 'Constellation sails', 'Translucent geometric hulls span between tasks in the same space. They crystallize and solidify as project tasks are completed.'),
             row(const Icon(Icons.radar, color: Color(0xFF00F5FF)), 'Spider Radar Focus', 'Circular sensory sonar sweep that dims background distraction and locks your focus onto the highest priority Next Moves.'),
             row(const Icon(Icons.gps_fixed, color: Color(0xFF00FF88)), 'Slingshot Quick-Capture', 'Pull back an elastic silk sling on the web canvas and release to launch and inject new thread seeds directly into target orbits.'),
+            row(const Icon(Icons.mic, color: Color(0xFFD946EF)), 'Cinematic Voice-to-Web', 'Dictate tasks with real-time acoustic spider waveforms. Extracts space, due date, priority, and automatically weaves silk links directly into the web.'),
             head('Moving around'),
             row(const Icon(Icons.touch_app, color: kBlue), 'Drag, pinch, two-finger twist', 'Rotate, zoom, tilt. Double tap to fit everything.'),
           ],
