@@ -10,6 +10,7 @@ import 'package:spider_mind/features/web3d/web_legend.dart';
 import 'package:spider_mind/features/web3d/web_painter.dart';
 import 'package:spider_mind/models/space.dart';
 import 'package:spider_mind/models/thread.dart';
+import 'package:spider_mind/models/urgency.dart';
 import 'package:spider_mind/state/app_state.dart';
 import 'package:spider_mind/ui/editor.dart';
 import 'package:spider_mind/ui/shell.dart';
@@ -308,5 +309,80 @@ void main() {
     await tester.pump();
     expect(find.text('SPIDER RADAR • FOCUS LOCK'), findsNothing);
   });
+
+  test('WebPainter paints Slingshot Quick-Capture bands, trajectory and projectile', () {
+    final camera = WebCamera(width: 800, height: 600);
+    final scene = WebScene()
+      ..layout = WebLayout.compute(
+        threads: [thread1],
+        spaces: const [space1],
+        now: DateTime.now(),
+      )
+      ..slingshotActive = true
+      ..slingshotDragging = true
+      ..slingshotAnchor = const Offset(400, 300)
+      ..slingshotDrag = const Offset(360, 360)
+      ..slingshotTension = 0.65
+      ..slingshotSeedTitle = 'Catapult Seed'
+      ..slingshotTargetSpokeName = 'Personal'
+      ..slingshotTargetBand = UrgencyBand.now;
+
+    final painter = WebPainter(scene, camera);
+    final recorder = PictureRecorder();
+    final canvas = Canvas(recorder);
+
+    painter.paint(canvas, const Size(800, 600));
+    var pic = recorder.endRecording();
+    expect(pic, isNotNull);
+
+    // Test projectile flying phase
+    scene
+      ..slingshotDragging = false
+      ..slingshotFlying = true
+      ..slingshotFlightProgress = 0.5
+      ..slingshotFlightStart = const Offset(360, 360)
+      ..slingshotFlightEnd = const Offset(450, 180);
+
+    final recorder2 = PictureRecorder();
+    final canvas2 = Canvas(recorder2);
+    painter.paint(canvas2, const Size(800, 600));
+    pic = recorder2.endRecording();
+    expect(pic, isNotNull);
+  });
+
+  testWidgets('WebTab engages Slingshot Quick-Capture and injects new thread', (tester) async {
+    final state = AppState.test(spaces: [space1], threads: [thread1]);
+
+    await tester.pumpWidget(makeTestable(const WebTab(), state));
+    await tester.pump();
+
+    final slingBtn = find.byTooltip('Slingshot Quick-Capture');
+    expect(slingBtn, findsOneWidget);
+
+    // Tap to toggle Slingshot on
+    await tester.tap(slingBtn);
+    await tester.pump();
+
+    expect(find.text('SLINGSHOT QUICK-CAPTURE'), findsOneWidget);
+    expect(find.text('Fire'), findsOneWidget);
+
+    // Enter a thread title
+    await tester.enterText(find.byType(TextField).last, 'Quantum Leap');
+    await tester.pump();
+
+    // Tap Fire
+    await tester.tap(find.text('Fire'));
+    await tester.pump();
+
+    // Verify thread was created in state
+    expect(state.threads.any((t) => t.title == 'Quantum Leap'), isTrue);
+
+    // Verify confirmation message
+    expect(find.textContaining('Injected "Quantum Leap" into Work'), findsOneWidget);
+
+    // Settle flash and snackbar timers
+    await tester.pump(const Duration(seconds: 4));
+  });
 }
+
 

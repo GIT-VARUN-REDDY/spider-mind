@@ -10,6 +10,7 @@ import '../models/misc.dart';
 import '../features/web3d/web_layout.dart';
 import '../features/web3d/web_legend.dart';
 import '../features/web3d/web_view_3d.dart';
+import '../models/space.dart';
 import '../models/thread.dart';
 import '../models/urgency.dart';
 import '../state/app_state.dart';
@@ -1171,9 +1172,15 @@ class _WebTabState extends State<WebTab> {
   bool _showMembranes = true;
   bool _radarActive = false;
   int _radarTargetIndex = 0;
+  bool _slingshotActive = false;
+  final TextEditingController _slingTitle = TextEditingController();
+  String? _aimedSpaceName;
+  UrgencyBand _aimedBand = UrgencyBand.now;
+  double _slingTension = 0.0;
 
   @override
   void dispose() {
+    _slingTitle.dispose();
     _playTimer?.cancel();
     _ctl.dispose();
     super.dispose();
@@ -1241,6 +1248,23 @@ class _WebTabState extends State<WebTab> {
                   _LinkPill(s),
                   const Spacer(),
                   IconButton(
+                    tooltip: 'Slingshot Quick-Capture',
+                    icon: Icon(
+                      Icons.gps_fixed,
+                      color: _slingshotActive ? const Color(0xFF00FF88) : null,
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        _slingshotActive = !_slingshotActive;
+                        if (_slingshotActive) {
+                          _timeTravelOpen = false;
+                          _radarActive = false;
+                          HapticFeedback.mediumImpact();
+                        }
+                      });
+                    },
+                  ),
+                  IconButton(
                     tooltip: 'Spider Radar Focus Mode',
                     icon: Icon(
                       Icons.radar,
@@ -1251,6 +1275,7 @@ class _WebTabState extends State<WebTab> {
                         _radarActive = !_radarActive;
                         if (_radarActive) {
                           _timeTravelOpen = false;
+                          _slingshotActive = false;
                           final moves = s.nextMoves(limit: 5);
                           if (moves.isNotEmpty) {
                             _radarTargetIndex = 0;
@@ -1332,6 +1357,66 @@ class _WebTabState extends State<WebTab> {
                 radarActive: _radarActive,
                 radarTargetId: radarTargetId,
                 focusThreadIds: focusIds,
+                slingshotActive: _slingshotActive,
+                slingshotSeedTitle: _slingTitle.text,
+                onSlingshotAimChanged: (tension, spaceName, band) {
+                  setState(() {
+                    _slingTension = tension;
+                    _aimedSpaceName = spaceName;
+                    _aimedBand = band;
+                  });
+                },
+                onSlingshotFired: (worldPos, spaceId, band) {
+                  final title = _slingTitle.text.trim().isEmpty ? 'Quick Thread' : _slingTitle.text.trim();
+                  DateTime? due;
+                  switch (band) {
+                    case UrgencyBand.now:
+                      due = DateTime.now().add(const Duration(hours: 3));
+                      break;
+                    case UrgencyBand.tomorrow:
+                      due = DateTime.now().add(const Duration(days: 1));
+                      break;
+                    case UrgencyBand.week:
+                      due = DateTime.now().add(const Duration(days: 5));
+                      break;
+                    case UrgencyBand.month:
+                      due = DateTime.now().add(const Duration(days: 20));
+                      break;
+                    default:
+                      due = null;
+                  }
+                  final targetSpace = (spaceId != null ? s.spaceById(spaceId) : null) ?? (s.spaces.isNotEmpty ? s.spaces.first : null);
+                  final thread = s.createThread(
+                    title: title,
+                    spaceId: targetSpace?.id,
+                    dueAt: due,
+                  );
+                  s.flashThread(thread.id);
+                  _ctl.focusOn(thread.id);
+                  HapticFeedback.heavyImpact();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      backgroundColor: const Color(0xFF060914),
+                      content: Row(
+                        children: [
+                          const Icon(Icons.gps_fixed, color: Color(0xFF00FF88), size: 18),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Injected "$title" into ${targetSpace?.name ?? "Web"} (${band.label})!',
+                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        ],
+                      ),
+                      duration: const Duration(seconds: 3),
+                    ),
+                  );
+                  setState(() {
+                    _slingTitle.clear();
+                    _slingTension = 0.0;
+                  });
+                },
                 hiddenSpaceIds: Set.of(_hidden),
                 highlightKeyword: _search && _kw.trim().isNotEmpty ? _kw.trim() : null,
                 reduceMotion: s.settings.reduceMotion,
@@ -1361,7 +1446,7 @@ class _WebTabState extends State<WebTab> {
         right: 12,
         bottom: selected != null
             ? 200
-            : ((_timeTravelOpen || _timeTravelDays > 0 || _radarActive) ? 190 : 90),
+            : ((_timeTravelOpen || _timeTravelDays > 0 || _radarActive || _slingshotActive) ? 190 : 90),
         child: Column(children: [
           IconButton.filledTonal(tooltip: 'Zoom in', icon: const Icon(Icons.add), onPressed: () => _ctl.zoomBy(1.4)),
           const SizedBox(height: 6),
@@ -1428,6 +1513,79 @@ class _WebTabState extends State<WebTab> {
               }
             },
             onClose: () => setState(() => _radarActive = false),
+          ),
+        ),
+      if (_slingshotActive)
+        Positioned(
+          left: 14,
+          right: 14,
+          bottom: selected == null ? 84 : 194,
+          child: _SlingshotDock(
+            titleController: _slingTitle,
+            tension: _slingTension,
+            aimedSpaceName: _aimedSpaceName,
+            aimedBand: _aimedBand,
+            onLaunch: () {
+              final title = _slingTitle.text.trim().isEmpty ? 'Quick Thread' : _slingTitle.text.trim();
+              DateTime? due;
+              switch (_aimedBand) {
+                case UrgencyBand.now:
+                  due = DateTime.now().add(const Duration(hours: 3));
+                  break;
+                case UrgencyBand.tomorrow:
+                  due = DateTime.now().add(const Duration(days: 1));
+                  break;
+                case UrgencyBand.week:
+                  due = DateTime.now().add(const Duration(days: 5));
+                  break;
+                case UrgencyBand.month:
+                  due = DateTime.now().add(const Duration(days: 20));
+                  break;
+                default:
+                  due = null;
+              }
+              final targetSpace = (_aimedSpaceName != null
+                      ? s.spaces.cast<Space?>().firstWhere(
+                            (sp) => sp?.name.toLowerCase() == _aimedSpaceName!.toLowerCase(),
+                            orElse: () => null,
+                          )
+                      : null) ??
+                  (s.spaces.isNotEmpty ? s.spaces.first : null);
+              final thread = s.createThread(
+                title: title,
+                spaceId: targetSpace?.id,
+                dueAt: due,
+              );
+              s.flashThread(thread.id);
+              _ctl.focusOn(thread.id);
+              HapticFeedback.heavyImpact();
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  backgroundColor: const Color(0xFF060914),
+                  content: Row(
+                    children: [
+                      const Icon(Icons.gps_fixed, color: Color(0xFF00FF88), size: 18),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Injected "$title" into ${targetSpace?.name ?? "Web"} (${_aimedBand.label})!',
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ],
+                  ),
+                  duration: const Duration(seconds: 3),
+                ),
+              );
+              setState(() {
+                _slingTitle.clear();
+                _slingTension = 0.0;
+              });
+            },
+            onClose: () => setState(() {
+              _slingshotActive = false;
+              _slingTension = 0.0;
+            }),
           ),
         ),
       if (selected != null)
@@ -1886,3 +2044,160 @@ class _SelectedCard extends StatelessWidget {
     );
   }
 }
+
+class _SlingshotDock extends StatelessWidget {
+  const _SlingshotDock({
+    required this.titleController,
+    required this.tension,
+    required this.aimedSpaceName,
+    required this.aimedBand,
+    required this.onLaunch,
+    required this.onClose,
+  });
+
+  final TextEditingController titleController;
+  final double tension;
+  final String? aimedSpaceName;
+  final UrgencyBand aimedBand;
+  final VoidCallback onLaunch;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    const neonEmerald = Color(0xFF00FF88);
+    final tensionPct = (tension * 100).toInt();
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: const Color(0xFF070B18).withValues(alpha: 0.90),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: neonEmerald.withValues(alpha: 0.65), width: 1.2),
+            boxShadow: [
+              BoxShadow(
+                color: neonEmerald.withValues(alpha: 0.18),
+                blurRadius: 18,
+                spreadRadius: 2,
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 9,
+                    height: 9,
+                    decoration: const BoxDecoration(
+                      color: neonEmerald,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(color: neonEmerald, blurRadius: 8, spreadRadius: 2),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'SLINGSHOT QUICK-CAPTURE',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 1.2,
+                      color: neonEmerald,
+                    ),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.close, size: 18, color: Colors.white70),
+                    onPressed: onClose,
+                    visualDensity: VisualDensity.compact,
+                    tooltip: 'Exit Slingshot',
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: titleController,
+                      style: const TextStyle(fontSize: 14, color: Colors.white, fontWeight: FontWeight.w600),
+                      decoration: InputDecoration(
+                        hintText: 'Thread title to inject...',
+                        hintStyle: TextStyle(fontSize: 13, color: Colors.white.withValues(alpha: 0.4)),
+                        prefixIcon: const Icon(Icons.gps_fixed, size: 18, color: neonEmerald),
+                        isDense: true,
+                        filled: true,
+                        fillColor: Colors.white.withValues(alpha: 0.08),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: BorderSide(color: neonEmerald.withValues(alpha: 0.3)),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: neonEmerald, width: 1.4),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: neonEmerald,
+                      foregroundColor: const Color(0xFF03040A),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    icon: const Icon(Icons.rocket_launch_rounded, size: 16),
+                    label: const Text('Fire', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    onPressed: onLaunch,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.05),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      tension > 0.1 ? Icons.track_changes : Icons.touch_app_outlined,
+                      size: 15,
+                      color: neonEmerald,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        tension > 0.05
+                            ? 'Tension $tensionPct%  •  Target: [${aimedSpaceName ?? 'Web'}] (${aimedBand.label})'
+                            : 'Pull back on canvas to aim trajectory  →  Release to shoot seed!',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: tension > 0.05 ? neonEmerald : Colors.white70,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+

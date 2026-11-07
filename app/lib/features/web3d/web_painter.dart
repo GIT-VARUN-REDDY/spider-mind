@@ -31,6 +31,20 @@ class WebScene {
   double radarRadius = 0.0;
   String? radarTargetId;
   Set<String> focusThreadIds = {};
+  // Feature 5: Slingshot Quick-Capture
+  bool slingshotActive = false;
+  bool slingshotDragging = false;
+  Offset? slingshotAnchor;
+  Offset? slingshotDrag;
+  String slingshotSeedTitle = '';
+  double slingshotTension = 0.0;
+  bool slingshotFlying = false;
+  double slingshotFlightProgress = 0.0;
+  Offset? slingshotFlightStart;
+  Offset? slingshotFlightEnd;
+  String? slingshotTargetSpokeName;
+  UrgencyBand? slingshotTargetBand;
+  Color? slingshotTargetColor;
   bool dark = true;
   bool reduceMotion = false;
   bool lowGraphics = false;
@@ -631,6 +645,10 @@ class WebPainter extends CustomPainter {
       canvas.drawRRect(pill, Paint()..color = (dark ? const Color(0xFF03040A) : Colors.white).withValues(alpha: 0.72));
       tp.paint(canvas, o);
     }
+
+    if (scene.slingshotActive || scene.slingshotFlying) {
+      _paintSlingshotQuickCapture(canvas, size, scene, dark);
+    }
   }
 
   Path _shape(ThreadType type, Offset c, double r) {
@@ -944,6 +962,234 @@ class WebPainter extends CustomPainter {
         ..color = const Color(0xFF00F5FF).withValues(alpha: 0.70)
         ..strokeWidth = 1.6,
     );
+  }
+
+  /// Renders elastic silk slingshot, tension prediction trajectory, and seed flight.
+  void _paintSlingshotQuickCapture(Canvas canvas, Size size, WebScene scene, bool dark) {
+    const neonEmerald = Color(0xFF00FF88);
+
+    // 1. When actively dragging the slingshot band
+    if (scene.slingshotDragging && scene.slingshotAnchor != null && scene.slingshotDrag != null) {
+      final anchor = scene.slingshotAnchor!;
+      final drag = scene.slingshotDrag!;
+      final delta = drag - anchor;
+      final dist = delta.distance;
+      final tension = scene.slingshotTension.clamp(0.0, 1.0);
+
+      // Perpendicular prong offset (width ~54px between posts)
+      final perp = dist > 0.001
+          ? Offset(-delta.dy, delta.dx) / dist * 27.0
+          : const Offset(27.0, 0.0);
+      final leftProng = anchor + perp;
+      final rightProng = anchor - perp;
+
+      // Draw cybernetic sling anchor base
+      canvas.drawCircle(
+        anchor,
+        14.0,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.4
+          ..color = neonEmerald.withValues(alpha: 0.35),
+      );
+      canvas.drawCircle(
+        anchor,
+        4.0,
+        Paint()..color = neonEmerald.withValues(alpha: 0.6),
+      );
+
+      // Prong posts
+      final postPaint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3.0
+        ..strokeCap = StrokeCap.round
+        ..color = neonEmerald;
+      canvas.drawLine(anchor, leftProng, postPaint);
+      canvas.drawLine(anchor, rightProng, postPaint);
+
+      // Prong glowing tips
+      canvas.drawCircle(leftProng, 4.0, Paint()..color = Colors.white);
+      canvas.drawCircle(rightProng, 4.0, Paint()..color = Colors.white);
+
+      // Elastic dual silk bands (thinner as tension increases)
+      final bandWidth = (3.4 * (1.0 - 0.45 * tension)).clamp(1.4, 3.4);
+      final bandGlow = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = bandWidth + 3.0
+        ..strokeCap = StrokeCap.round
+        ..color = neonEmerald.withValues(alpha: 0.35 + 0.35 * tension)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4.0);
+      final bandCore = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = bandWidth
+        ..strokeCap = StrokeCap.round
+        ..color = Color.lerp(neonEmerald, Colors.white, 0.4 + 0.4 * tension)!;
+
+      canvas.drawLine(leftProng, drag, bandGlow);
+      canvas.drawLine(leftProng, drag, bandCore);
+      canvas.drawLine(rightProng, drag, bandGlow);
+      canvas.drawLine(rightProng, drag, bandCore);
+
+      // Trajectory Prediction Line & Landing Crosshair
+      if (dist > 12.0) {
+        final launchDir = -delta / dist;
+        final launchPowerPx = math.min(size.width * 0.85, dist * 3.4);
+        final targetPos = anchor + launchDir * launchPowerPx;
+
+        // Dotted / dashed luminous laser trajectory path
+        const dotCount = 14;
+        for (var i = 1; i <= dotCount; i++) {
+          final t = i / dotCount;
+          final dotPos = Offset.lerp(anchor, targetPos, t)!;
+          final dotR = 2.0 + 1.5 * (1.0 - t);
+          final dotAlpha = (0.3 + 0.6 * tension * (1.0 - t * 0.5)).clamp(0.1, 0.95);
+          canvas.drawCircle(
+            dotPos,
+            dotR,
+            Paint()..color = neonEmerald.withValues(alpha: dotAlpha),
+          );
+        }
+
+        // Target Landing Reticle & Sonar Ping
+        final reticlePulse = scene.reduceMotion ? 0.0 : math.sin(scene.time * 8.0) * 2.5;
+        final reticleR = 18.0 + reticlePulse;
+        final targetColor = scene.slingshotTargetColor ?? neonEmerald;
+
+        canvas.drawCircle(
+          targetPos,
+          reticleR,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.8
+            ..color = targetColor.withValues(alpha: 0.85),
+        );
+        canvas.drawCircle(
+          targetPos,
+          reticleR + 7.0,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 0.9
+            ..color = targetColor.withValues(alpha: 0.45),
+        );
+        // Crosshairs
+        canvas.drawLine(
+          Offset(targetPos.dx - reticleR - 5, targetPos.dy),
+          Offset(targetPos.dx + reticleR + 5, targetPos.dy),
+          Paint()..color = targetColor.withValues(alpha: 0.7)..strokeWidth = 1.2,
+        );
+        canvas.drawLine(
+          Offset(targetPos.dx, targetPos.dy - reticleR - 5),
+          Offset(targetPos.dx, targetPos.dy + reticleR + 5),
+          Paint()..color = targetColor.withValues(alpha: 0.7)..strokeWidth = 1.2,
+        );
+
+        // Landing target info badge
+        final spokeName = scene.slingshotTargetSpokeName ?? 'Web';
+        final bandLabel = scene.slingshotTargetBand?.label ?? 'NOW';
+        final infoText = '$spokeName • $bandLabel';
+        final tp = _text(infoText, 10.5, Colors.white, w: FontWeight.w700);
+        final badgeRect = Rect.fromCenter(
+          center: Offset(targetPos.dx, targetPos.dy - reticleR - 14),
+          width: tp.width + 14,
+          height: tp.height + 8,
+        );
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(badgeRect, const Radius.circular(8)),
+          Paint()..color = const Color(0xFF03040A).withValues(alpha: 0.85),
+        );
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(badgeRect, const Radius.circular(8)),
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.0
+            ..color = targetColor.withValues(alpha: 0.8),
+        );
+        tp.paint(canvas, Offset(badgeRect.left + 7, badgeRect.top + 4));
+      }
+
+      // Thread Seed Capsule at drag position
+      final seedPulse = scene.reduceMotion ? 1.0 : (1.0 + 0.12 * math.sin(scene.time * 6.0));
+      final seedR = 11.0 * seedPulse;
+      canvas.drawCircle(
+        drag,
+        seedR + 6.0,
+        Paint()
+          ..color = neonEmerald.withValues(alpha: 0.35 + 0.35 * tension)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6.0),
+      );
+      canvas.drawCircle(
+        drag,
+        seedR,
+        Paint()..color = Color.lerp(neonEmerald, const Color(0xFF00F5FF), 0.35)!,
+      );
+      canvas.drawCircle(
+        drag,
+        seedR - 3.5,
+        Paint()..color = Colors.white,
+      );
+
+      // Seed title preview pill above drag position
+      if (scene.slingshotSeedTitle.trim().isNotEmpty) {
+        final titleText = scene.slingshotSeedTitle.trim();
+        final tp = _text(titleText, 11, Colors.white, w: FontWeight.w700);
+        final pillRect = Rect.fromCenter(
+          center: Offset(drag.dx, drag.dy - seedR - 16),
+          width: tp.width + 16,
+          height: tp.height + 8,
+        );
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(pillRect, const Radius.circular(8)),
+          Paint()..color = const Color(0xFF060914).withValues(alpha: 0.90),
+        );
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(pillRect, const Radius.circular(8)),
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.2
+            ..color = neonEmerald.withValues(alpha: 0.85),
+        );
+        tp.paint(canvas, Offset(pillRect.left + 8, pillRect.top + 4));
+      }
+    }
+
+    // 2. When seed is flying along trajectory
+    if (scene.slingshotFlying && scene.slingshotFlightStart != null && scene.slingshotFlightEnd != null) {
+      final start = scene.slingshotFlightStart!;
+      final end = scene.slingshotFlightEnd!;
+      final prog = scene.slingshotFlightProgress.clamp(0.0, 1.0);
+      final currentPos = Offset.lerp(start, end, prog)!;
+
+      // Comet tail trailing behind current position
+      final tailProg = (prog - 0.22).clamp(0.0, 1.0);
+      final tailStart = Offset.lerp(start, end, tailProg)!;
+
+      final tailPaint = Paint()
+        ..shader = LinearGradient(
+          colors: [
+            neonEmerald.withValues(alpha: 0.0),
+            neonEmerald.withValues(alpha: 0.85),
+            Colors.white,
+          ],
+        ).createShader(Rect.fromPoints(tailStart, currentPos))
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3.6
+        ..strokeCap = StrokeCap.round;
+      canvas.drawLine(tailStart, currentPos, tailPaint);
+
+      // Flying Seed Projectile Core
+      canvas.drawCircle(
+        currentPos,
+        14.0,
+        Paint()
+          ..color = neonEmerald.withValues(alpha: 0.6)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6.0),
+      );
+      canvas.drawCircle(
+        currentPos,
+        8.0,
+        Paint()..color = Colors.white,
+      );
+    }
   }
 
   /// Nearest node within [maxDist] px of the tap, or null.

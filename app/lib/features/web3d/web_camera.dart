@@ -99,6 +99,31 @@ class WebCamera {
     return ProjectedPoint(width / 2 + x1 * s, height / 2 - up * s, s, zc, true);
   }
 
+  /// Unprojects a 2D screen coordinate to the 3D web plane where z = 0.
+  Vec3 unprojectToWebPlane(Offset screenPos) {
+    final cp = math.cos(pitch);
+    final sp = math.sin(pitch);
+    final cy = math.cos(yaw);
+    final sy = math.sin(yaw);
+
+    final dy = (screenPos.dy - height / 2) / focal;
+    final denom = cp + dy * sp;
+    final safeDenom = denom.abs() < 1e-4 ? (denom < 0 ? -1e-4 : 1e-4) : denom;
+    final y1 = -dy * distance / safeDenom;
+
+    final zc = distance + y1 * sp;
+    final s = focal / (zc <= 0.1 ? 0.1 : zc);
+    final x1 = (screenPos.dx - width / 2) / s;
+
+    final xr = x1 + panX;
+    final yr = y1 + panY;
+
+    final x = xr * cy + yr * sy;
+    final y = -xr * sy + yr * cy;
+
+    return Vec3(x, y, 0);
+  }
+
   /// Frames a disc of [radius] (world units) with margin, at the default tilt.
   void fit(double radius, {bool animate = true}) {
     final r = math.max(radius, 1.0) * 1.12;

@@ -776,6 +776,8 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  void flashThread(String id) => _flashFor(id);
+
   void _flashFor(String id) {
     _flash.add(id);
     Timer(const Duration(milliseconds: 2500), () {
