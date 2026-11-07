@@ -1,7 +1,11 @@
 import 'dart:async';
+import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+
+import '../models/misc.dart';
 
 import '../features/web3d/web_layout.dart';
 import '../features/web3d/web_legend.dart';
@@ -1165,6 +1169,8 @@ class _WebTabState extends State<WebTab> {
   bool _isPlaying = false;
   Timer? _playTimer;
   bool _showMembranes = true;
+  bool _radarActive = false;
+  int _radarTargetIndex = 0;
 
   @override
   void dispose() {
@@ -1235,6 +1241,32 @@ class _WebTabState extends State<WebTab> {
                   _LinkPill(s),
                   const Spacer(),
                   IconButton(
+                    tooltip: 'Spider Radar Focus Mode',
+                    icon: Icon(
+                      Icons.radar,
+                      color: _radarActive ? const Color(0xFF00F5FF) : null,
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        _radarActive = !_radarActive;
+                        if (_radarActive) {
+                          _timeTravelOpen = false;
+                          final moves = s.nextMoves(limit: 5);
+                          if (moves.isNotEmpty) {
+                            _radarTargetIndex = 0;
+                            _ctl.focusOn(moves[0].thread.id);
+                            HapticFeedback.mediumImpact();
+                          } else {
+                            _radarActive = false;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('No active tasks to focus on! Add tasks to engage Spider Radar.')),
+                            );
+                          }
+                        }
+                      });
+                    },
+                  ),
+                  IconButton(
                     tooltip: 'Constellation Membranes (Project Sails)',
                     icon: Icon(
                       _showMembranes ? Icons.auto_awesome : Icons.auto_awesome_outlined,
@@ -1282,21 +1314,32 @@ class _WebTabState extends State<WebTab> {
             ]),
           ),
           Expanded(
-            child: WebView3D(
-              threads: s.threads,
-              spaces: s.spaces,
-              controller: _ctl,
-              selectedId: selected?.id,
-              flashIds: s.flashIds,
-              showDone: s.settings.showDone,
-              showMembranes: _showMembranes,
-              hiddenSpaceIds: Set.of(_hidden),
-              highlightKeyword: _search && _kw.trim().isNotEmpty ? _kw.trim() : null,
-              reduceMotion: s.settings.reduceMotion,
-              lowGraphics: s.settings.lowGraphics,
-              timeTravelOffset: timeTravelOffset,
-              onSelect: (id) => setState(() => _selected = id),
-            ),
+            child: Builder(builder: (context) {
+              final radarMoves = s.nextMoves(limit: 5);
+              final radarTargetId = (_radarActive && radarMoves.isNotEmpty)
+                  ? radarMoves[_radarTargetIndex.clamp(0, radarMoves.length - 1)].thread.id
+                  : null;
+              final focusIds = _radarActive ? radarMoves.map((m) => m.thread.id).toSet() : const <String>{};
+
+              return WebView3D(
+                threads: s.threads,
+                spaces: s.spaces,
+                controller: _ctl,
+                selectedId: selected?.id,
+                flashIds: s.flashIds,
+                showDone: s.settings.showDone,
+                showMembranes: _showMembranes,
+                radarActive: _radarActive,
+                radarTargetId: radarTargetId,
+                focusThreadIds: focusIds,
+                hiddenSpaceIds: Set.of(_hidden),
+                highlightKeyword: _search && _kw.trim().isNotEmpty ? _kw.trim() : null,
+                reduceMotion: s.settings.reduceMotion,
+                lowGraphics: s.settings.lowGraphics,
+                timeTravelOffset: timeTravelOffset,
+                onSelect: (id) => setState(() => _selected = id),
+              );
+            }),
           ),
         ]),
       if (s.threads.isEmpty)
@@ -1318,7 +1361,7 @@ class _WebTabState extends State<WebTab> {
         right: 12,
         bottom: selected != null
             ? 200
-            : (_timeTravelOpen || _timeTravelDays > 0 ? 190 : 90),
+            : ((_timeTravelOpen || _timeTravelDays > 0 || _radarActive) ? 190 : 90),
         child: Column(children: [
           IconButton.filledTonal(tooltip: 'Zoom in', icon: const Icon(Icons.add), onPressed: () => _ctl.zoomBy(1.4)),
           const SizedBox(height: 6),
@@ -1348,6 +1391,43 @@ class _WebTabState extends State<WebTab> {
               _isPlaying = false;
               _playTimer?.cancel();
             }),
+          ),
+        ),
+      if (_radarActive)
+        Positioned(
+          left: 14,
+          right: 14,
+          bottom: selected == null ? 84 : 194,
+          child: _SpiderRadarFocusDock(
+            moves: s.nextMoves(limit: 5),
+            currentIndex: _radarTargetIndex,
+            onCycleNext: () {
+              final moves = s.nextMoves(limit: 5);
+              if (moves.isEmpty) return;
+              setState(() {
+                _radarTargetIndex = (_radarTargetIndex + 1) % moves.length;
+                _ctl.focusOn(moves[_radarTargetIndex].thread.id);
+                HapticFeedback.lightImpact();
+              });
+            },
+            onStartDoing: (threadId) {
+              s.setStatus(threadId, ThreadStatus.doing);
+              HapticFeedback.mediumImpact();
+            },
+            onMarkDone: (threadId) {
+              s.setStatus(threadId, ThreadStatus.done);
+              HapticFeedback.mediumImpact();
+              final moves = s.nextMoves(limit: 5);
+              if (moves.isEmpty) {
+                setState(() => _radarActive = false);
+              } else {
+                setState(() {
+                  _radarTargetIndex = _radarTargetIndex.clamp(0, moves.length - 1);
+                  _ctl.focusOn(moves[_radarTargetIndex].thread.id);
+                });
+              }
+            },
+            onClose: () => setState(() => _radarActive = false),
           ),
         ),
       if (selected != null)
@@ -1562,6 +1642,182 @@ class _PresetChip extends StatelessWidget {
               fontSize: 11,
               fontWeight: selected ? FontWeight.bold : FontWeight.w500,
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SpiderRadarFocusDock extends StatelessWidget {
+  const _SpiderRadarFocusDock({
+    required this.moves,
+    required this.currentIndex,
+    required this.onCycleNext,
+    required this.onStartDoing,
+    required this.onMarkDone,
+    required this.onClose,
+  });
+
+  final List<NextMove> moves;
+  final int currentIndex;
+  final VoidCallback onCycleNext;
+  final void Function(String id) onStartDoing;
+  final void Function(String id) onMarkDone;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    if (moves.isEmpty) return const SizedBox.shrink();
+    final current = moves[currentIndex.clamp(0, moves.length - 1)];
+    final t = current.thread;
+    final isDoing = t.status == ThreadStatus.doing;
+    final s = context.watch<AppState>();
+    final space = s.spaceById(t.spaceId);
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(18),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+          decoration: BoxDecoration(
+            color: const Color(0xFF090E1E).withValues(alpha: 0.90),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: const Color(0xFF00F5FF).withValues(alpha: 0.45), width: 1.4),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF00F5FF).withValues(alpha: 0.18),
+                blurRadius: 18,
+                spreadRadius: 2,
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.radar, color: Color(0xFF00F5FF), size: 16),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'SPIDER RADAR • FOCUS LOCK',
+                    style: TextStyle(
+                      color: Color(0xFF00F5FF),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                  const Spacer(),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      'Target ${currentIndex + 1} of ${moves.length}',
+                      style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Colors.white70),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  InkWell(
+                    onTap: onClose,
+                    borderRadius: BorderRadius.circular(12),
+                    child: const Padding(
+                      padding: EdgeInsets.all(2),
+                      child: Icon(Icons.close, size: 18, color: Colors.white70),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  CircleAvatar(
+                    backgroundColor: space?.color ?? const Color(0xFF32B4FF),
+                    radius: 7,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      t.title,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: current.score >= 100
+                          ? kCrimson.withValues(alpha: 0.22)
+                          : const Color(0xFF00F5FF).withValues(alpha: 0.18),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: current.score >= 100 ? kCrimson : const Color(0xFF00F5FF),
+                        width: 0.8,
+                      ),
+                    ),
+                    child: Text(
+                      current.reason.isEmpty
+                          ? (current.score >= 100 ? 'Overdue' : 'Next Move')
+                          : current.reason,
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: current.score >= 100 ? kCrimson : const Color(0xFF00F5FF),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  if (!isDoing)
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFF00F5FF),
+                          side: const BorderSide(color: Color(0xFF00F5FF)),
+                          visualDensity: VisualDensity.compact,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        icon: const Icon(Icons.play_arrow_rounded, size: 16),
+                        label: const Text('Start Doing', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                        onPressed: () => onStartDoing(t.id),
+                      ),
+                    ),
+                  if (!isDoing) const SizedBox(width: 8),
+                  Expanded(
+                    child: FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFF50FA7B),
+                        foregroundColor: const Color(0xFF03040A),
+                        visualDensity: VisualDensity.compact,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      icon: const Icon(Icons.check_circle_outline, size: 16),
+                      label: const Text('Mark Done', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      onPressed: () => onMarkDone(t.id),
+                    ),
+                  ),
+                  if (moves.length > 1) const SizedBox(width: 8),
+                  if (moves.length > 1)
+                    IconButton.filledTonal(
+                      tooltip: 'Next Target in Radar',
+                      icon: const Icon(Icons.arrow_forward_rounded, size: 18),
+                      onPressed: onCycleNext,
+                    ),
+                ],
+              ),
+            ],
           ),
         ),
       ),

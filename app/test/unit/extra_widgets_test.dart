@@ -257,5 +257,56 @@ void main() {
     await tester.tap(membraneBtn);
     await tester.pump();
   });
+
+  test('WebPainter paints Spider Radar sweep and target spotlight without error', () {
+    final now = DateTime.utc(2026, 11, 6, 12, 0);
+    final t1 = Thread.draft(title: 'Urgent Task', spaceId: 's1', priority: Priority.high);
+    final t2 = Thread.draft(title: 'Other Task', spaceId: 's1');
+    final layout = WebLayout.compute(threads: [t1, t2], spaces: const [space1], now: now);
+
+    final scene = WebScene()
+      ..layout = layout
+      ..byId = {t1.id: t1, t2.id: t2}
+      ..now = now
+      ..time = 2.0
+      ..radarActive = true
+      ..radarAngle = 1.2
+      ..radarRadius = 3.5
+      ..radarTargetId = t1.id
+      ..focusThreadIds = {t1.id};
+
+    final camera = WebCamera()..width = 800..height = 600;
+    final painter = WebPainter(scene, camera);
+    final recorder = PictureRecorder();
+    final canvas = Canvas(recorder);
+
+    painter.paint(canvas, const Size(800, 600));
+    final pic = recorder.endRecording();
+    expect(pic, isNotNull);
+  });
+
+  testWidgets('WebTab engages Spider Radar focus mode and renders focus dock', (tester) async {
+    final state = AppState.test(spaces: [space1], threads: [thread1]);
+
+    await tester.pumpWidget(makeTestable(const WebTab(), state));
+    await tester.pump();
+
+    final radarBtn = find.byTooltip('Spider Radar Focus Mode');
+    expect(radarBtn, findsOneWidget);
+
+    // Tap to engage radar focus mode
+    await tester.tap(radarBtn);
+    await tester.pump();
+
+    // Verify HUD dock is displayed
+    expect(find.text('SPIDER RADAR • FOCUS LOCK'), findsOneWidget);
+    expect(find.text('Design 3D Web'), findsOneWidget);
+    expect(find.text('Mark Done'), findsOneWidget);
+
+    // Tap to toggle radar off
+    await tester.tap(radarBtn);
+    await tester.pump();
+    expect(find.text('SPIDER RADAR • FOCUS LOCK'), findsNothing);
+  });
 }
 

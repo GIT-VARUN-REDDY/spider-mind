@@ -34,6 +34,9 @@ class WebView3D extends StatefulWidget {
     this.flashIds = const <String>{},
     this.showDone = false,
     this.showMembranes = true,
+    this.radarActive = false,
+    this.radarTargetId,
+    this.focusThreadIds = const <String>{},
     this.hiddenSpaceIds = const <String>{},
     this.highlightKeyword,
     this.reduceMotion = false,
@@ -49,6 +52,9 @@ class WebView3D extends StatefulWidget {
   final Set<String> flashIds;
   final bool showDone;
   final bool showMembranes;
+  final bool radarActive;
+  final String? radarTargetId;
+  final Set<String> focusThreadIds;
   final Set<String> hiddenSpaceIds;
   final String? highlightKeyword;
   final bool reduceMotion;
@@ -122,6 +128,9 @@ class _WebView3DState extends State<WebView3D> with SingleTickerProviderStateMix
       ..selectedId = widget.selectedId
       ..keyword = widget.highlightKeyword
       ..showMembranes = widget.showMembranes
+      ..radarActive = widget.radarActive
+      ..radarTargetId = widget.radarTargetId
+      ..focusThreadIds = widget.focusThreadIds
       ..reduceMotion = widget.reduceMotion
       ..lowGraphics = widget.lowGraphics;
   }
@@ -209,7 +218,9 @@ class _WebView3DState extends State<WebView3D> with SingleTickerProviderStateMix
     if (_cam.isMoving) return true;
     if (_painter.isAnimatingLabels) return true;
     if (_isAnimatingNodes) return true;
-    if (widget.reduceMotion) return _scene.flashStart.isNotEmpty || _scene.shockwaveStart.isNotEmpty;
+    if (widget.reduceMotion) {
+      return _scene.flashStart.isNotEmpty || _scene.shockwaveStart.isNotEmpty || _scene.radarActive;
+    }
     return true;
   }
 
@@ -230,6 +241,13 @@ class _WebView3DState extends State<WebView3D> with SingleTickerProviderStateMix
     _isAnimatingNodes = _stepNodePositions(dt);
     _scene.flashStart.removeWhere((_, s) => _scene.time - s > 2.6);
     _scene.shockwaveStart.removeWhere((_, s) => _scene.time - s > 2.2);
+    if (_scene.radarActive && !widget.reduceMotion) {
+      _scene.radarAngle = (_scene.radarAngle + dt * 1.6) % 6.283185307179586;
+      _scene.radarRadius += dt * 3.5;
+      if (_scene.radarRadius > _scene.layout.outerRadius + 3) {
+        _scene.radarRadius = 0.0;
+      }
+    }
     _frame.value++;
     if (!_needsAnimation) _ticker.stop();
   }

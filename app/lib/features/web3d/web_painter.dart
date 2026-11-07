@@ -26,6 +26,11 @@ class WebScene {
   Duration timeTravelOffset = Duration.zero;
   int bottleneckCount = 0;
   bool showMembranes = true;
+  bool radarActive = false;
+  double radarAngle = 0.0;
+  double radarRadius = 0.0;
+  String? radarTargetId;
+  Set<String> focusThreadIds = {};
   bool dark = true;
   bool reduceMotion = false;
   bool lowGraphics = false;
@@ -300,6 +305,11 @@ class WebPainter extends CustomPainter {
       placedLabelRects.add(renderRect);
     }
 
+    // Spider Radar Sensory Sweep.
+    if (scene.radarActive && !scene.lowGraphics) {
+      _paintSpiderRadarSweep(canvas, size, scene, dark);
+    }
+
     // Constellation Membranes (Project Sails).
     if (scene.showMembranes && !scene.lowGraphics) {
       _paintConstellationMembranes(canvas, layout, scene, dark, selected);
@@ -311,12 +321,23 @@ class WebPainter extends CustomPainter {
       if (na == null || nb == null) continue;
       final touches = selected != null && (e.a == selected || e.b == selected);
       final dim = selected != null && !touches;
+      final radarActive = scene.radarActive;
+      final isRadarLink = radarActive &&
+          ((scene.radarTargetId != null && (e.a == scene.radarTargetId || e.b == scene.radarTargetId)) ||
+           (scene.focusThreadIds.contains(e.a) && scene.focusThreadIds.contains(e.b)));
+      var alpha = (touches ? 0.95 : (e.explicit ? 0.55 : 0.28)) * (dim ? 0.35 : 1.0);
+      if (radarActive) {
+        if (isRadarLink) {
+          alpha = 0.95;
+        } else {
+          alpha = (alpha * 0.16).clamp(0.04, 0.10);
+        }
+      }
       final pa = scene.animatedPositions[e.a] ?? na.position;
       final pb = scene.animatedPositions[e.b] ?? nb.position;
       final oa = _p(pa.x, pa.y, pa.z), ob = _p(pb.x, pb.y, pb.z);
       final ca = layout.spokes[na.spokeIndex].color, cb = layout.spokes[nb.spokeIndex].color;
       final col = Color.lerp(ca, cb, 0.5)!;
-      final alpha = (touches ? 0.95 : (e.explicit ? 0.55 : 0.28)) * (dim ? 0.35 : 1.0);
       final ta = scene.byId[e.a], tb = scene.byId[e.b];
       final overdueA = ta != null && isOverdue(ta, scene.now);
       final overdueB = tb != null && isOverdue(tb, scene.now);
@@ -460,6 +481,17 @@ class WebPainter extends CustomPainter {
       var alpha = _fog(p.depth);
       if (selected != null && !isSel && !related.contains(n.id)) alpha *= 0.35;
       if (kw != null && kw.isNotEmpty && !t.keywords.any((k) => k.toLowerCase().contains(kw)) && !t.title.toLowerCase().contains(kw)) alpha *= 0.2;
+      final isRadarTarget = scene.radarActive && n.id == scene.radarTargetId;
+      final isRadarFocused = scene.radarActive && scene.focusThreadIds.contains(n.id);
+      if (scene.radarActive) {
+        if (isRadarTarget) {
+          alpha = 1.0;
+        } else if (isRadarFocused) {
+          alpha = 0.92;
+        } else {
+          alpha = (alpha * 0.16).clamp(0.06, 0.20);
+        }
+      }
       final r = nodeRadiusPx(scale: p.scale, priorityIndex: t.priority.index, isGoal: t.type == ThreadType.goal);
       final c = Offset(p.x, p.y);
       final overdue = isOverdue(t, scene.now);
@@ -533,6 +565,32 @@ class WebPainter extends CustomPainter {
         canvas.drawCircle(c, r + 5, Paint()..style = PaintingStyle.stroke..strokeWidth = 2..color = Colors.white);
         canvas.drawCircle(c, r + 9, Paint()..style = PaintingStyle.stroke..strokeWidth = 1..color = Colors.white.withValues(alpha: 0.5));
       }
+      if (isRadarTarget) {
+        final pulse = scene.reduceMotion ? 1.0 : (1.0 + math.sin(scene.time * 6.0) * 0.16);
+        if (!low) {
+          canvas.drawCircle(
+            c,
+            r * 2.8 * pulse,
+            Paint()
+              ..color = const Color(0xFF00F5FF).withValues(alpha: 0.32)
+              ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10),
+          );
+        }
+        final boxSize = r + 8.0;
+        final reticlePaint = Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.8
+          ..color = const Color(0xFF00F5FF).withValues(alpha: 0.92);
+        final rot = scene.reduceMotion ? 0.0 : (scene.time * 0.7);
+        canvas.save();
+        canvas.translate(c.dx, c.dy);
+        canvas.rotate(rot);
+        for (var arm = 0; arm < 4; arm++) {
+          canvas.drawLine(Offset(boxSize - 4, 0), Offset(boxSize + 4, 0), reticlePaint);
+          canvas.rotate(math.pi / 2);
+        }
+        canvas.restore();
+      }
 
       // Label candidate.
       final tp = _text(t.title, 11, ink.withValues(alpha: 0.92));
@@ -547,6 +605,13 @@ class WebPainter extends CustomPainter {
       if (overdue) imp += 50;
       if (kw != null && kw.isNotEmpty && alpha > 0.5) imp += 100;
       if (done) imp -= 3;
+      if (isRadarTarget) {
+        imp += 5000;
+      } else if (isRadarFocused) {
+        imp += 900;
+      } else if (scene.radarActive) {
+        imp -= 60;
+      }
       labels.add(LabelCandidate(id: n.id, x: lx, y: ly, w: w, h: h, importance: imp));
       labelText[n.id] = tp;
       labelNode[n.id] = Offset(lx, ly);
@@ -810,6 +875,75 @@ class WebPainter extends CustomPainter {
         }
       }
     }
+  }
+
+  /// Renders rotating sonar sweep and radial waves for Spider Radar Focus Mode.
+  void _paintSpiderRadarSweep(Canvas canvas, Size size, WebScene scene, bool dark) {
+    final center = _p(0, 0, 0);
+    final outerR = (_p(scene.layout.outerRadius + 2.5, 0, 0) - center).distance;
+
+    // 1. Expanding circular sonar pulse wave
+    if (scene.radarRadius > 0.1) {
+      final waveRPx = (_p(scene.radarRadius, 0, 0) - center).distance;
+      final maxRad = scene.layout.outerRadius + 3.0;
+      final waveProgress = (scene.radarRadius / maxRad).clamp(0.0, 1.0);
+      final waveAlpha = (1.0 - waveProgress).clamp(0.0, 1.0);
+
+      canvas.drawCircle(
+        center,
+        waveRPx,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.4
+          ..color = const Color(0xFF00F5FF).withValues(alpha: waveAlpha * 0.45)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4.0),
+      );
+      canvas.drawCircle(
+        center,
+        waveRPx,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.0
+          ..color = Colors.white.withValues(alpha: waveAlpha * 0.75),
+      );
+    }
+
+    // 2. Rotating sweeping 360-degree radar beam cone
+    const sweepAngle = 0.52; // ~30 degrees wide beam
+    final beamPath = Path()..moveTo(center.dx, center.dy);
+    beamPath.arcTo(
+      Rect.fromCircle(center: center, radius: outerR),
+      scene.radarAngle - sweepAngle,
+      sweepAngle,
+      false,
+    );
+    beamPath.close();
+
+    final beamPaint = Paint()
+      ..shader = SweepGradient(
+        center: Alignment.center,
+        startAngle: scene.radarAngle - sweepAngle,
+        endAngle: scene.radarAngle,
+        colors: [
+          Colors.transparent,
+          const Color(0xFF00F5FF).withValues(alpha: 0.14),
+        ],
+      ).createShader(Rect.fromCircle(center: center, radius: outerR))
+      ..style = PaintingStyle.fill;
+    canvas.drawPath(beamPath, beamPaint);
+
+    // 3. Crisp leading radar laser scan ray
+    final rayEnd = Offset(
+      center.dx + outerR * math.cos(scene.radarAngle),
+      center.dy + outerR * math.sin(scene.radarAngle),
+    );
+    canvas.drawLine(
+      center,
+      rayEnd,
+      Paint()
+        ..color = const Color(0xFF00F5FF).withValues(alpha: 0.70)
+        ..strokeWidth = 1.6,
+    );
   }
 
   /// Nearest node within [maxDist] px of the tap, or null.
