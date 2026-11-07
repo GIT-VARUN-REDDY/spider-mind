@@ -33,6 +33,7 @@ class WebView3D extends StatefulWidget {
     this.selectedId,
     this.flashIds = const <String>{},
     this.showDone = false,
+    this.showMembranes = true,
     this.hiddenSpaceIds = const <String>{},
     this.highlightKeyword,
     this.reduceMotion = false,
@@ -47,6 +48,7 @@ class WebView3D extends StatefulWidget {
   final String? selectedId;
   final Set<String> flashIds;
   final bool showDone;
+  final bool showMembranes;
   final Set<String> hiddenSpaceIds;
   final String? highlightKeyword;
   final bool reduceMotion;
@@ -119,6 +121,7 @@ class _WebView3DState extends State<WebView3D> with SingleTickerProviderStateMix
     _scene
       ..selectedId = widget.selectedId
       ..keyword = widget.highlightKeyword
+      ..showMembranes = widget.showMembranes
       ..reduceMotion = widget.reduceMotion
       ..lowGraphics = widget.lowGraphics;
   }

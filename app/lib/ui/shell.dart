@@ -1164,6 +1164,7 @@ class _WebTabState extends State<WebTab> {
   double _timeTravelDays = 0.0;
   bool _isPlaying = false;
   Timer? _playTimer;
+  bool _showMembranes = true;
 
   @override
   void dispose() {
@@ -1234,6 +1235,14 @@ class _WebTabState extends State<WebTab> {
                   _LinkPill(s),
                   const Spacer(),
                   IconButton(
+                    tooltip: 'Constellation Membranes (Project Sails)',
+                    icon: Icon(
+                      _showMembranes ? Icons.auto_awesome : Icons.auto_awesome_outlined,
+                      color: _showMembranes ? kBlue : null,
+                    ),
+                    onPressed: () => setState(() => _showMembranes = !_showMembranes),
+                  ),
+                  IconButton(
                     tooltip: 'Future Scrubber (Time Travel)',
                     icon: Icon(
                       _timeTravelDays > 0 ? Icons.hourglass_top_rounded : Icons.hourglass_bottom_rounded,
@@ -1280,6 +1289,7 @@ class _WebTabState extends State<WebTab> {
               selectedId: selected?.id,
               flashIds: s.flashIds,
               showDone: s.settings.showDone,
+              showMembranes: _showMembranes,
               hiddenSpaceIds: Set.of(_hidden),
               highlightKeyword: _search && _kw.trim().isNotEmpty ? _kw.trim() : null,
               reduceMotion: s.settings.reduceMotion,

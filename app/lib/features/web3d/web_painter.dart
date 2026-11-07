@@ -25,6 +25,7 @@ class WebScene {
   Map<String, Vec3> animatedPositions = {};
   Duration timeTravelOffset = Duration.zero;
   int bottleneckCount = 0;
+  bool showMembranes = true;
   bool dark = true;
   bool reduceMotion = false;
   bool lowGraphics = false;
@@ -297,6 +298,11 @@ class WebPainter extends CustomPainter {
 
       tp.paint(canvas, renderPos - Offset(tp.width / 2, tp.height / 2));
       placedLabelRects.add(renderRect);
+    }
+
+    // Constellation Membranes (Project Sails).
+    if (scene.showMembranes && !scene.lowGraphics) {
+      _paintConstellationMembranes(canvas, layout, scene, dark, selected);
     }
 
     // Edges.
@@ -595,6 +601,215 @@ class WebPainter extends CustomPainter {
         break;
     }
     return path;
+  }
+
+  /// Calculates the 2D convex hull of a set of points (Monotone Chain).
+  List<Offset> _convexHull(List<Offset> points) {
+    if (points.length <= 2) return List<Offset>.from(points);
+    final sorted = List<Offset>.from(points)
+      ..sort((a, b) => a.dx != b.dx ? a.dx.compareTo(b.dx) : a.dy.compareTo(b.dy));
+
+    double cross(Offset o, Offset a, Offset b) =>
+        (a.dx - o.dx) * (b.dy - o.dy) - (a.dy - o.dy) * (b.dx - o.dx);
+
+    final lower = <Offset>[];
+    for (final p in sorted) {
+      while (lower.length >= 2 && cross(lower[lower.length - 2], lower.last, p) <= 0) {
+        lower.removeLast();
+      }
+      lower.add(p);
+    }
+
+    final upper = <Offset>[];
+    for (final p in sorted.reversed) {
+      while (upper.length >= 2 && cross(upper[upper.length - 2], upper.last, p) <= 0) {
+        upper.removeLast();
+      }
+      upper.add(p);
+    }
+
+    if (lower.length > 1) lower.removeLast();
+    if (upper.length > 1) upper.removeLast();
+    return lower..addAll(upper);
+  }
+
+  /// Builds a softly rounded organic membrane path from convex hull vertices.
+  Path _buildMembranePath(List<Offset> hull) {
+    final path = Path();
+    final n = hull.length;
+    if (n < 3) return path;
+    final midpoints = <Offset>[];
+    for (var i = 0; i < n; i++) {
+      final a = hull[i];
+      final b = hull[(i + 1) % n];
+      midpoints.add(Offset((a.dx + b.dx) / 2, (a.dy + b.dy) / 2));
+    }
+    path.moveTo(midpoints[0].dx, midpoints[0].dy);
+    for (var i = 0; i < n; i++) {
+      final nextMid = midpoints[(i + 1) % n];
+      final corner = hull[(i + 1) % n];
+      path.quadraticBezierTo(corner.dx, corner.dy, nextMid.dx, nextMid.dy);
+    }
+    path.close();
+    return path;
+  }
+
+  /// Renders translucent polymer/crystal sails spanning related task clusters.
+  void _paintConstellationMembranes(
+    Canvas canvas,
+    WebLayout layout,
+    WebScene scene,
+    bool dark,
+    String? selected,
+  ) {
+    // 1. Spoke / Space project sails (clusters of >= 3 nodes in the same space)
+    for (final s in layout.spokes) {
+      final clusterNodes = layout.nodes.values.where((n) => n.spokeIndex == s.index).toList();
+      if (clusterNodes.length < 3) continue;
+
+      final pts = <Offset>[];
+      for (final n in clusterNodes) {
+        final pos = scene.animatedPositions[n.id] ?? n.position;
+        pts.add(_p(pos.x, pos.y, pos.z));
+      }
+
+      final hull = _convexHull(pts);
+      if (hull.length < 3) continue;
+
+      final path = _buildMembranePath(hull);
+      final bounds = path.getBounds();
+      if (bounds.width < 18 || bounds.height < 18) continue;
+
+      final clusterThreads = [for (final n in clusterNodes) scene.byId[n.id]].whereType<Thread>().toList();
+      final doneCount = clusterThreads.where((t) => t.isDone).length;
+      final totalCount = clusterThreads.length;
+      final ratio = totalCount > 0 ? (doneCount / totalCount).clamp(0.0, 1.0) : 0.0;
+      final isClusterSelected = selected != null && clusterNodes.any((n) => n.id == selected);
+      final shimmer = scene.reduceMotion ? 0.0 : math.sin(scene.time * 2.0 + s.index * 1.4) * 0.02;
+
+      final baseAlpha = (0.05 + 0.16 * ratio + (isClusterSelected ? 0.10 : 0.0) + shimmer).clamp(0.02, 0.40);
+      final sailColor = ratio >= 0.99 ? const Color(0xFF50FA7B) : s.color;
+
+      // Translucent polymer / crystal gradient fill
+      final fillPaint = Paint()
+        ..shader = RadialGradient(
+          colors: [
+            sailColor.withValues(alpha: (baseAlpha * 1.5).clamp(0.03, 0.50)),
+            sailColor.withValues(alpha: (baseAlpha * 0.6).clamp(0.01, 0.30)),
+            sailColor.withValues(alpha: 0.01),
+          ],
+          stops: const [0.0, 0.72, 1.0],
+        ).createShader(bounds)
+        ..style = PaintingStyle.fill;
+      canvas.drawPath(path, fillPaint);
+
+      // Internal gossamer ribs from centroid to hull vertices
+      final center = bounds.center;
+      final ribAlpha = (0.06 + 0.14 * ratio + (isClusterSelected ? 0.08 : 0.0)).clamp(0.03, 0.28);
+      final ribPaint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 0.85
+        ..color = sailColor.withValues(alpha: ribAlpha);
+      for (final v in hull) {
+        canvas.drawLine(center, v, ribPaint);
+      }
+
+      // Shimmering perimeter rim
+      if (isClusterSelected || ratio >= 0.8) {
+        canvas.drawPath(
+          path,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 4.0
+            ..color = sailColor.withValues(alpha: (0.10 + 0.16 * ratio))
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4.0),
+        );
+      }
+      final rimPaint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = isClusterSelected ? 2.0 : (1.0 + 0.6 * ratio)
+        ..color = sailColor.withValues(alpha: (0.20 + 0.32 * ratio + (isClusterSelected ? 0.25 : 0.0)).clamp(0.12, 0.85));
+      canvas.drawPath(path, rimPaint);
+
+      // Subtle project progress watermark seal at center of larger sails
+      if (bounds.width > 90 && bounds.height > 90) {
+        final pctStr = '${(ratio * 100).toInt()}%';
+        final pctTp = _text(pctStr, 10, sailColor.withValues(alpha: (0.50 + 0.35 * ratio).clamp(0.3, 0.9)), w: FontWeight.bold);
+        final sealRect = Rect.fromCenter(center: center, width: pctTp.width + 12, height: pctTp.height + 6);
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(sealRect, const Radius.circular(8)),
+          Paint()..color = (dark ? const Color(0xFF060913) : Colors.white).withValues(alpha: 0.65),
+        );
+        pctTp.paint(canvas, center - Offset(pctTp.width / 2, pctTp.height / 2));
+      }
+    }
+
+    // 2. Cross-Space explicit dependency bridge sails
+    final explicitAdj = <String, Set<String>>{};
+    for (final e in scene.edges) {
+      if (!e.explicit) continue;
+      explicitAdj.putIfAbsent(e.a, () => {}).add(e.b);
+      explicitAdj.putIfAbsent(e.b, () => {}).add(e.a);
+    }
+    final visited = <String>{};
+    for (final startId in explicitAdj.keys) {
+      if (visited.contains(startId)) continue;
+      final comp = <String>[];
+      final queue = [startId];
+      visited.add(startId);
+      while (queue.isNotEmpty) {
+        final curr = queue.removeLast();
+        comp.add(curr);
+        for (final neighbor in explicitAdj[curr] ?? const <String>{}) {
+          if (!visited.contains(neighbor)) {
+            visited.add(neighbor);
+            queue.add(neighbor);
+          }
+        }
+      }
+      if (comp.length >= 3 && comp.length <= 12) {
+        final spokeIndices = {for (final id in comp) layout.nodes[id]?.spokeIndex}.whereType<int>().toSet();
+        if (spokeIndices.length > 1) {
+          final pts = <Offset>[];
+          for (final id in comp) {
+            final n = layout.nodes[id];
+            if (n == null) continue;
+            final pos = scene.animatedPositions[id] ?? n.position;
+            pts.add(_p(pos.x, pos.y, pos.z));
+          }
+          final hull = _convexHull(pts);
+          if (hull.length >= 3) {
+            final path = _buildMembranePath(hull);
+            final bounds = path.getBounds();
+            if (bounds.width >= 30 && bounds.height >= 30) {
+              final isBridgeSelected = selected != null && comp.contains(selected);
+              const bridgeColor = Color(0xFF9D4EDD); // Iridescent violet bridge
+              final bridgeAlpha = (isBridgeSelected ? 0.18 : 0.08);
+
+              canvas.drawPath(
+                path,
+                Paint()
+                  ..shader = RadialGradient(
+                    colors: [
+                      bridgeColor.withValues(alpha: bridgeAlpha * 1.5),
+                      const Color(0xFF00E5FF).withValues(alpha: bridgeAlpha * 0.8),
+                      Colors.transparent,
+                    ],
+                  ).createShader(bounds)
+                  ..style = PaintingStyle.fill,
+              );
+              canvas.drawPath(
+                path,
+                Paint()
+                  ..style = PaintingStyle.stroke
+                  ..strokeWidth = isBridgeSelected ? 1.8 : 1.0
+                  ..color = bridgeColor.withValues(alpha: isBridgeSelected ? 0.6 : 0.3),
+              );
+            }
+          }
+        }
+      }
+    }
   }
 
   /// Nearest node within [maxDist] px of the tap, or null.

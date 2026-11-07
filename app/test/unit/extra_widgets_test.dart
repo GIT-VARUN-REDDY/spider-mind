@@ -204,5 +204,58 @@ void main() {
     final picture = recorder.endRecording();
     expect(picture, isNotNull);
   });
+
+  test('WebPainter paints Constellation Membranes for clusters of >= 3 nodes', () {
+    final now = DateTime.utc(2026, 11, 6, 12, 0);
+    final t1 = Thread.draft(title: 'Node 1', spaceId: 's1');
+    final t2 = Thread.draft(title: 'Node 2', spaceId: 's1');
+    final t3 = Thread.draft(title: 'Node 3', spaceId: 's1').copyWith(status: ThreadStatus.done);
+    final layout = WebLayout.compute(threads: [t1, t2, t3], spaces: const [space1], now: now);
+
+    final scene = WebScene()
+      ..layout = layout
+      ..byId = {t1.id: t1, t2.id: t2, t3.id: t3}
+      ..now = now
+      ..time = 1.0
+      ..showMembranes = true;
+
+    final camera = WebCamera()
+      ..width = 800
+      ..height = 600;
+
+    final painter = WebPainter(scene, camera);
+    final recorder = PictureRecorder();
+    final canvas = Canvas(recorder);
+
+    // Painting with constellation membranes enabled
+    painter.paint(canvas, const Size(800, 600));
+    final picture = recorder.endRecording();
+    expect(picture, isNotNull);
+
+    // Disabling showMembranes should also paint cleanly
+    scene.showMembranes = false;
+    final recorder2 = PictureRecorder();
+    final canvas2 = Canvas(recorder2);
+    painter.paint(canvas2, const Size(800, 600));
+    expect(recorder2.endRecording(), isNotNull);
+  });
+
+  testWidgets('WebTab toggles Constellation Membranes toolbar button', (tester) async {
+    final state = AppState.test(spaces: [space1], threads: [thread1]);
+
+    await tester.pumpWidget(makeTestable(const WebTab(), state));
+    await tester.pump();
+
+    final membraneBtn = find.byTooltip('Constellation Membranes (Project Sails)');
+    expect(membraneBtn, findsOneWidget);
+
+    // Tap to toggle off
+    await tester.tap(membraneBtn);
+    await tester.pump();
+
+    // Tap to toggle back on
+    await tester.tap(membraneBtn);
+    await tester.pump();
+  });
 }
 
