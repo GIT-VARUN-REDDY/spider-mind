@@ -325,8 +325,7 @@ class WebLayout {
         final maxOff = 0.7 * math.pi / s;
         final off = math.min(WebMetrics.slotGap / r, maxOff);
         final angle = spokeAngle + lateral * off;
-        final overdueDip = isOverdue(t, clock) ? -1.1 : 0.0;
-        final z = (t.priority.index - 1) * WebMetrics.zStep + overdueDip;
+        final z = (t.priority.index - 1) * WebMetrics.zStep;
         nodes[t.id] = WebNode(
           id: t.id,
           position: Vec3(worldX(r, angle), worldY(r, angle), z),

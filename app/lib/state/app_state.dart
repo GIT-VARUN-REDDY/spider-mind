@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
 import '../core/config.dart';
@@ -524,10 +523,6 @@ class AppState extends ChangeNotifier {
     var next = t.copyWith(updatedAt: DateTime.now().toUtc());
     final old = _threads[t.id];
     if (old != null && old.status != t.status) {
-      if (t.status == ThreadStatus.done) {
-        HapticFeedback.mediumImpact();
-        _flashFor(t.id);
-      }
       next = t.status == ThreadStatus.done
           ? next.copyWith(completedAt: DateTime.now().toUtc())
           : next.copyWith(clearCompletedAt: true);
@@ -558,7 +553,6 @@ class AppState extends ChangeNotifier {
   void toggleChecklist(String id, String itemId) {
     final t = _threads[id];
     if (t == null) return;
-    HapticFeedback.lightImpact();
     saveThread(t.copyWith(checklist: [for (final c in t.checklist) c.id == itemId ? ChecklistItem(id: c.id, text: c.text, done: !c.done) : c]));
   }
 
@@ -775,8 +769,6 @@ class AppState extends ChangeNotifier {
         break;
     }
   }
-
-  void flashThread(String id) => _flashFor(id);
 
   void _flashFor(String id) {
     _flash.add(id);

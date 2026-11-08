@@ -1,12 +1,9 @@
-import 'dart:math' as math;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:flutter/services.dart' show HapticFeedback;
 
 import '../../models/space.dart';
 import '../../models/thread.dart';
-import '../../models/urgency.dart';
 import 'web_camera.dart';
 import 'web_edges.dart';
 import 'web_layout.dart';
@@ -35,19 +32,10 @@ class WebView3D extends StatefulWidget {
     this.selectedId,
     this.flashIds = const <String>{},
     this.showDone = false,
-    this.showMembranes = true,
-    this.radarActive = false,
-    this.radarTargetId,
-    this.focusThreadIds = const <String>{},
-    this.slingshotActive = false,
-    this.slingshotSeedTitle = '',
-    this.onSlingshotFired,
-    this.onSlingshotAimChanged,
     this.hiddenSpaceIds = const <String>{},
     this.highlightKeyword,
     this.reduceMotion = false,
     this.lowGraphics = false,
-    this.timeTravelOffset = Duration.zero,
   });
 
   final List<Thread> threads;
@@ -57,19 +45,10 @@ class WebView3D extends StatefulWidget {
   final String? selectedId;
   final Set<String> flashIds;
   final bool showDone;
-  final bool showMembranes;
-  final bool radarActive;
-  final String? radarTargetId;
-  final Set<String> focusThreadIds;
-  final bool slingshotActive;
-  final String slingshotSeedTitle;
-  final void Function(Vec3 worldPos, String? spaceId, UrgencyBand band)? onSlingshotFired;
-  final void Function(double tension, String? spaceName, UrgencyBand band)? onSlingshotAimChanged;
   final Set<String> hiddenSpaceIds;
   final String? highlightKeyword;
   final bool reduceMotion;
   final bool lowGraphics;
-  final Duration timeTravelOffset;
 
   @override
   State<WebView3D> createState() => _WebView3DState();
@@ -83,16 +62,10 @@ class _WebView3DState extends State<WebView3D> with SingleTickerProviderStateMix
   late WebPainter _painter;
   Duration _last = Duration.zero;
   bool _hasFit = false;
-  bool _isAnimatingNodes = false;
   double _lastScale = 1;
   double _lastRotation = 0;
   Offset? _lastTouchPos;
   Size _size = Size.zero;
-  int _lastTensionStep = 0;
-  Offset? _slingshotScreenTarget;
-  Vec3? _slingshotTargetWorld;
-  String? _slingshotTargetSpaceId;
-  UrgencyBand? _slingshotTargetBand;
 
   @override
   void initState() {
@@ -110,18 +83,13 @@ class _WebView3DState extends State<WebView3D> with SingleTickerProviderStateMix
       old.controller._detach(this);
       widget.controller._attach(this);
     }
-    final timeShifted = old.timeTravelOffset != widget.timeTravelOffset;
     final structural = !identical(old.threads, widget.threads) ||
         !identical(old.spaces, widget.spaces) ||
         old.showDone != widget.showDone ||
-        old.hiddenSpaceIds != widget.hiddenSpaceIds ||
-        timeShifted;
+        old.hiddenSpaceIds != widget.hiddenSpaceIds;
     if (structural) _rebuildLayout();
     for (final id in widget.flashIds) {
-      if (!old.flashIds.contains(id)) {
-        _scene.flashStart[id] = _scene.time;
-        _scene.shockwaveStart[id] = _scene.time;
-      }
+      if (!old.flashIds.contains(id)) _scene.flashStart[id] = _scene.time;
     }
     if (widget.selectedId != old.selectedId && widget.selectedId != null && old.selectedId == null) {
       // keep the camera where the user left it; selection only highlights
@@ -142,36 +110,22 @@ class _WebView3DState extends State<WebView3D> with SingleTickerProviderStateMix
     _scene
       ..selectedId = widget.selectedId
       ..keyword = widget.highlightKeyword
-      ..showMembranes = widget.showMembranes
-      ..radarActive = widget.radarActive
-      ..radarTargetId = widget.radarTargetId
-      ..focusThreadIds = widget.focusThreadIds
-      ..slingshotActive = widget.slingshotActive
-      ..slingshotSeedTitle = widget.slingshotSeedTitle
       ..reduceMotion = widget.reduceMotion
       ..lowGraphics = widget.lowGraphics;
   }
 
   void _rebuildLayout() {
-    final simulatedNow = DateTime.now().add(widget.timeTravelOffset);
+    final now = DateTime.now();
     final layout = WebLayout.compute(
       threads: widget.threads,
       spaces: widget.spaces,
-      now: simulatedNow,
+      now: now,
       showDone: widget.showDone,
       hiddenSpaceIds: widget.hiddenSpaceIds,
     );
-    final bottleneckCount = widget.threads.where((t) {
-      if (t.isDone) return false;
-      final node = layout.nodes[t.id];
-      return node != null && node.band == UrgencyBand.now;
-    }).length;
-
     _scene
       ..layout = layout
-      ..now = simulatedNow
-      ..timeTravelOffset = widget.timeTravelOffset
-      ..bottleneckCount = bottleneckCount
+      ..now = now
       ..byId = {for (final t in widget.threads) t.id: t}
       ..edges = buildWebEdges(widget.threads.where((t) => layout.nodes.containsKey(t.id)).toList());
     _syncScene();
@@ -207,38 +161,10 @@ class _WebView3DState extends State<WebView3D> with SingleTickerProviderStateMix
     _kick();
   }
 
-  bool _stepNodePositions(double dt) {
-    var stillMoving = false;
-    final k = widget.reduceMotion ? 1.0 : (dt * 10.0).clamp(0.04, 1.0);
-    final targetNodes = _scene.layout.nodes;
-    for (final entry in targetNodes.entries) {
-      final id = entry.key;
-      final target = entry.value.position;
-      final current = _scene.animatedPositions[id];
-      if (current == null) {
-        _scene.animatedPositions[id] = target;
-      } else {
-        final dist = (target - current).length;
-        if (dist > 0.005) {
-          _scene.animatedPositions[id] = Vec3.lerp(current, target, k);
-          stillMoving = true;
-        } else {
-          _scene.animatedPositions[id] = target;
-        }
-      }
-    }
-    _scene.animatedPositions.removeWhere((id, _) => !targetNodes.containsKey(id));
-    return stillMoving;
-  }
-
   bool get _needsAnimation {
     if (_cam.isMoving) return true;
     if (_painter.isAnimatingLabels) return true;
-    if (_isAnimatingNodes) return true;
-    if (_scene.slingshotFlying || _scene.slingshotDragging) return true;
-    if (widget.reduceMotion) {
-      return _scene.flashStart.isNotEmpty || _scene.shockwaveStart.isNotEmpty || _scene.radarActive;
-    }
+    if (widget.reduceMotion) return _scene.flashStart.isNotEmpty;
     return true;
   }
 
@@ -256,28 +182,7 @@ class _WebView3DState extends State<WebView3D> with SingleTickerProviderStateMix
     _last = t;
     _scene.time += dt;
     _cam.step(dt);
-    _isAnimatingNodes = _stepNodePositions(dt);
     _scene.flashStart.removeWhere((_, s) => _scene.time - s > 2.6);
-    _scene.shockwaveStart.removeWhere((_, s) => _scene.time - s > 2.2);
-    if (_scene.radarActive && !widget.reduceMotion) {
-      _scene.radarAngle = (_scene.radarAngle + dt * 1.6) % 6.283185307179586;
-      _scene.radarRadius += dt * 3.5;
-      if (_scene.radarRadius > _scene.layout.outerRadius + 3) {
-        _scene.radarRadius = 0.0;
-      }
-    }
-    if (_scene.slingshotFlying) {
-      _scene.slingshotFlightProgress += dt * 2.8;
-      if (_scene.slingshotFlightProgress >= 1.0) {
-        _scene.slingshotFlying = false;
-        _scene.slingshotFlightProgress = 1.0;
-        final targetWorld = _slingshotTargetWorld ?? Vec3.zero;
-        final targetSpaceId = _slingshotTargetSpaceId;
-        final targetBand = _slingshotTargetBand ?? UrgencyBand.now;
-        _scene.shockwaveStart['__slingshot__'] = _scene.time;
-        widget.onSlingshotFired?.call(targetWorld, targetSpaceId, targetBand);
-      }
-    }
     _frame.value++;
     if (!_needsAnimation) _ticker.stop();
   }
@@ -311,15 +216,6 @@ class _WebView3DState extends State<WebView3D> with SingleTickerProviderStateMix
             onTapUp: (d) => _tap(d.localPosition),
             onDoubleTap: () => _fit(),
             onScaleStart: (d) {
-              if (widget.slingshotActive) {
-                _lastTensionStep = 0;
-                _scene.slingshotDragging = true;
-                _scene.slingshotAnchor = d.localFocalPoint;
-                _scene.slingshotDrag = d.localFocalPoint;
-                _scene.slingshotTension = 0.0;
-                _kick();
-                return;
-              }
               _cam.isDragging = true;
               _cam.yawVelocity = 0;
               _cam.pitchVelocity = 0;
@@ -329,69 +225,6 @@ class _WebView3DState extends State<WebView3D> with SingleTickerProviderStateMix
               _kick();
             },
             onScaleUpdate: (d) {
-              if (widget.slingshotActive && _scene.slingshotDragging) {
-                final anchor = _scene.slingshotAnchor ?? d.localFocalPoint;
-                final drag = d.localFocalPoint;
-                _scene.slingshotDrag = drag;
-                final delta = drag - anchor;
-                final dist = delta.distance;
-                final tension = (dist / 160.0).clamp(0.0, 1.0);
-                _scene.slingshotTension = tension;
-
-                // Tactile feedback on tension steps (25%, 50%, 75%, 90%)
-                final step = (tension * 4).floor();
-                if (step != _lastTensionStep && step > 0) {
-                  _lastTensionStep = step;
-                  HapticFeedback.selectionClick();
-                }
-
-                // Calculate trajectory and landing point
-                if (dist > 12.0) {
-                  final launchDir = -delta / dist;
-                  final launchPowerPx = math.min(_size.width * 0.85, dist * 3.4);
-                  final screenTarget = anchor + launchDir * launchPowerPx;
-                  _slingshotScreenTarget = screenTarget;
-
-                  // Unproject to web plane
-                  final world = _cam.unprojectToWebPlane(screenTarget);
-                  _slingshotTargetWorld = world;
-
-                  // Determine nearest ring & spoke
-                  final r = math.sqrt(world.x * world.x + world.y * world.y);
-                  WebRing? bestRing;
-                  double bestRingDiff = double.infinity;
-                  for (final ring in _scene.layout.rings) {
-                    final diff = (ring.radius - r).abs();
-                    if (diff < bestRingDiff) {
-                      bestRingDiff = diff;
-                      bestRing = ring;
-                    }
-                  }
-
-                  // Angle in web plane: clockwise from -pi/2
-                  final worldAngle = math.atan2(-world.y, world.x);
-                  WebSpoke? bestSpoke;
-                  double bestSpokeDiff = double.infinity;
-                  for (final spoke in _scene.layout.spokes) {
-                    var diff = (spoke.angle - worldAngle).abs();
-                    if (diff > math.pi) diff = 2 * math.pi - diff;
-                    if (diff < bestSpokeDiff) {
-                      bestSpokeDiff = diff;
-                      bestSpoke = spoke;
-                    }
-                  }
-
-                  _slingshotTargetSpaceId = bestSpoke?.spaceId;
-                  _slingshotTargetBand = bestRing?.band ?? UrgencyBand.now;
-                  _scene.slingshotTargetSpokeName = bestSpoke?.name ?? 'Web';
-                  _scene.slingshotTargetBand = _slingshotTargetBand;
-                  _scene.slingshotTargetColor = bestSpoke?.color;
-
-                  widget.onSlingshotAimChanged?.call(tension, bestSpoke?.name, _slingshotTargetBand!);
-                }
-                _kick();
-                return;
-              }
               _lastTouchPos = d.localFocalPoint;
               if (d.pointerCount >= 2) {
                 _cam.panBy(d.focalPointDelta.dx, d.focalPointDelta.dy);
@@ -409,18 +242,6 @@ class _WebView3DState extends State<WebView3D> with SingleTickerProviderStateMix
               _kick();
             },
             onScaleEnd: (d) {
-              if (widget.slingshotActive && _scene.slingshotDragging) {
-                _scene.slingshotDragging = false;
-                if (_scene.slingshotTension > 0.12 && _slingshotScreenTarget != null) {
-                  HapticFeedback.heavyImpact();
-                  _scene.slingshotFlying = true;
-                  _scene.slingshotFlightProgress = 0.0;
-                  _scene.slingshotFlightStart = _scene.slingshotDrag;
-                  _scene.slingshotFlightEnd = _slingshotScreenTarget;
-                }
-                _kick();
-                return;
-              }
               _cam.isDragging = false;
               if (!widget.reduceMotion) {
                 _cam.fling(
